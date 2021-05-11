@@ -1,6 +1,6 @@
 # robots_polar
 
-Senior thesis 2018.
+Senior thesis for Economics Honors program at UC Berkeley. Paper can be found [here](https://github.com/Reese565/robots_polar/blob/main/iapp.pdf).
 
 Industrial Automation and Political Polarization
 
