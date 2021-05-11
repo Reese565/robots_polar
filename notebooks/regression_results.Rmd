@@ -1,0 +1,35 @@
+---
+title: "Regression Results"
+author: "Maurice Williams"
+date: "11/25/2018"
+header-includes:
+- \usepackage{caption}
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(kableExtra)
+```
+
+
+
+
+\begin{table}[tbp]
+\begin{center}
+
+
+\end{center}
+\end{table}
+
+
+
+
+
+
+
+
+
+
+
+

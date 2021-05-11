@@ -1,0 +1,266 @@
+---
+title: "CZ EDA"
+author: "Maurice Williams"
+date: "12/12/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+library(cowplot)
+library(corrplot)
+library(AER)
+
+source("../scripts/functions.R")
+load("eda2.RData")
+```
+
+```{r}
+cw_fips_cty_name <- read.csv("../data/cw/cw_fips_ctyname.csv")
+```
+
+```{r}
+fss_e <- read.dta("../outputs/data/fss_e.dta")
+fss_e <- merge(fss_e, cw_fips_cty_name, by = "fipscty", all = F)
+fss_e1990 <- fss_e[fss_e$census == 1990, ]
+fss_e2000 <- fss_e[fss_e$census == 2000, ]
+fss_e2010 <- fss_e[fss_e$census == 2010, ]
+
+```
+
+
+```{r}
+cz_df <- read.dta("../outputs/data/fsscz_e.dta")
+cz_df90 <- cz_df[cz_df$census == 1990, ]
+cz_df00 <- cz_df[cz_df$census == 2000, ]
+cz_df10 <- cz_df[cz_df$census == 2010, ]
+```
+
+```{r}
+fssp <- read.dta("../outputs/data/fssp.dta")
+pres_92_00 <- fssp[fssp$p_elections == "elec_92-00",]
+pres_92_08 <- fssp[fssp$p_elections == "elec_92-08",]
+pres_92_16 <- fssp[fssp$p_elections == "elec_92-16",]
+pres_00_08 <- fssp[fssp$p_elections == "elec_00-08",]
+pres_00_16 <- fssp[fssp$p_elections == "elec_00-16",]
+pres_08_16 <- fssp[fssp$p_elections == "elec_00-16",]
+```
+
+```{r}
+# Delta Exposure Robs Quantiles
+der90q <- quantile(fss_e1990$eder_90, c(.1, .25, .5, .75, .9))
+der00q <- quantile(fss_e2000$eder_00, c(.1, .25, .5, .75, .9))
+der10q <- quantile(fss_e2010$eder_10, c(.1, .25, .5, .75, .9))
+
+der90q
+der00q
+der10q
+```
+
+```{r}
+# Exogenous Delta Exposure Robs Quantiles
+der90qcz <- quantile(cz_df90$eder_90, c(.1, .25, .5, .75, .9))
+der00qcz <- quantile(cz_df00$eder_00, c(.1, .25, .5, .75, .9))
+der10qcz <- quantile(cz_df10$eder_10, c(.1, .25, .5, .75, .9))
+
+der90qcz
+der00qcz
+der10qcz
+```
+
+```{r}
+# Delta Chinese Import Penetration Quantiles
+det90qcz <- quantile(cz_df90$edchip_90, c(.1, .25, .5, .75, .9))
+det00qcz <- quantile(cz_df00$edchip_00, c(.1, .25, .5, .75, .9))
+det10qcz <- quantile(cz_df10$edchip_10, c(.1, .25, .5, .75, .9))
+
+det90qcz
+det00qcz
+det10qcz
+```
+
+
+```{r}
+fs_cz90 <- cz_df90 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = delta_exp_robs)) +
+  geom_point(aes(size = tot_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", se = F,
+              col = "firebrick3",
+              size = 0.4,
+              aes(weight = wa_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2004-2010",
+                   breaks = seq(0,5,1)) +
+  scale_x_continuous(name = "Exposure to Robots EU 1993-2000", breaks = seq(0,5,1)) +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+fs_cz90
+```
+
+```{r}
+fs_cz00 <- cz_df00 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = delta_exp_robs)) +
+  geom_point(aes(size = tot_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", se = F,
+              col = "firebrick3",
+              size = 0.4,
+              aes(weight = wa_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2004-2010",
+                   breaks = seq(0,5,1)) +
+  scale_x_continuous(name = "Exposure to Robots EU 2001-2010", breaks = seq(0,5,1)) +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+fs_cz00
+```
+
+```{r}
+fs_cz10 <- cz_df10 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = delta_exp_robs)) +
+  geom_point(aes(size = tot_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", se = F,
+              col = "firebrick3",
+              size = 0.4,
+              aes(weight = wa_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2011-2016",
+                   breaks = seq(0,8,2)) +
+  scale_x_continuous(name = "Exposure to Robots EU 2011-2016", breaks = seq(0,5,1)) +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+fs_cz10
+```
+
+
+```{r echo = F, fig.height = 15, fig.width = 8}
+plot_grid(fs_cz90, fs_cz00, fs_cz10, ncol = 1, align = "h")
+```
+
+
+
+
+
+
+
+```{r}
+pdf("../outputs/plots/fs_plots.pdf", width=8, height=15)
+plot_grid(fs_cz90, fs_cz00, fs_cz10, ncol = 1, align = "h")
+dev.off()
+```
+
+
+```{r}
+fsplt_data <- read.csv("../outputs/data/fs_plt_data.csv", stringsAsFactors = F)
+fsplt_90 <- fsplt_data[fsplt_data$t1 == 1, ]
+fsplt_00 <- fsplt_data[fsplt_data$t2 == 1, ]
+fsplt_10 <- fsplt_data[fsplt_data$t3 == 1, ]
+```
+
+```{r}
+fsplt_90plt <- fsplt_90 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = derfs_90_res + 1)) +
+  geom_point(aes(size = tot_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", se = T,
+              col = "firebrick3",
+              size = 0.4,
+              aes(weight = tot_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2004-2010",
+                   breaks = seq(0,4,1)) +
+  scale_x_continuous(name = "Exposure to Robots EU 1993-2000",
+                     breaks = seq(0,6,1)) +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+fsplt_90plt
+```
+
+```{r}
+fsplt_00plt <- fsplt_00 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = derfs_00_res + 1)) +
+  geom_point(aes(size = tot_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", se = T,
+              col = "firebrick3",
+              size = 0.4,
+              aes(weight = tot_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2004-2010",
+                   breaks = seq(0,4,1)) +
+  scale_x_continuous(name = "Exposure to Robots EU 2001-2010", breaks = seq(0,8,1)) +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+fsplt_00plt
+```
+
+
+
+```{r}
+fsplt_10plt <- fsplt_10 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = derfs_10_res + 1)) +
+  geom_point(aes(size = tot_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", se = T,
+              col = "firebrick3",
+              size = 0.4,
+              aes(weight = tot_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2011-2016",
+                   breaks = seq(0,8,2)) +
+  scale_x_continuous(name = "Exposure to Robots EU 2011-2016", breaks = seq(0,5,1)) +
+  theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+fsplt_10plt
+```
+
+
+```{r}
+pdf("../outputs/plots/fs_res_plots.pdf", width=8, height=15)
+plot_grid(fsplt_90plt, fsplt_00plt, fsplt_10plt, ncol = 1, align = "h")
+dev.off()
+```
+
+
+
+
+
+
+

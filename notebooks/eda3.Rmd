@@ -1,0 +1,275 @@
+---
+title: "EDA3"
+author: "Maurice Williams"
+date: "12/12/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+library(cowplot)
+library(corrplot)
+library(AER)
+
+source("../scripts/functions.R")
+load("eda2.RData")
+```
+
+```{r}
+cw_fips_cty_name <- read.csv("../data/cw/cw_fips_ctyname.csv")
+```
+
+```{r}
+fss_e <- read.dta("../outputs/data/fss_e.dta")
+fss_e <- merge(fss_e, cw_fips_cty_name, by = "fipscty", all = F)
+fss_e1990 <- fss_e[fss_e$census == 1990, ]
+fss_e2000 <- fss_e[fss_e$census == 2000, ]
+fss_e2010 <- fss_e[fss_e$census == 2010, ]
+
+```
+
+
+```{r}
+cz_df <- read.dta("../outputs/data/fsscz_e.dta")
+cz_df90 <- cz_df[cz_df$census == 1990, ]
+cz_df00 <- cz_df[cz_df$census == 2000, ]
+cz_df10 <- cz_df[cz_df$census == 2010, ]
+```
+
+```{r}
+fssp <- read.dta("../outputs/data/fssp.dta")
+pres_00_08 <- fssp[fssp$p_elections == "elec_00-08",]
+pres_00_16 <- fssp[fssp$p_elections == "elec_00-16",]
+pres_08_16 <- fssp[fssp$p_elections == "elec_00-16",]
+```
+
+```{r}
+# Delta Exposure Robs Quantiles
+der90q <- quantile(fss_e1990$eder_90, c(.1, .25, .5, .75, .9))
+der00q <- quantile(fss_e2000$eder_00, c(.1, .25, .5, .75, .9))
+der10q <- quantile(fss_e2010$eder_10, c(.1, .25, .5, .75, .9))
+
+der90q
+der00q
+der10q
+```
+
+```{r}
+# Exogenous Delta Exposure Robs Quantiles
+der90qcz <- quantile(cz_df90$eder_90, c(.1, .25, .5, .75, .9))
+der00qcz <- quantile(cz_df00$eder_00, c(.1, .25, .5, .75, .9))
+der10qcz <- quantile(cz_df10$eder_10, c(.1, .25, .5, .75, .9))
+
+der90qcz
+der00qcz
+der10qcz
+```
+
+```{r}
+# Delta Chinese Import Penetration Quantiles
+det90qcz <- quantile(cz_df90$edchip_90, c(.1, .25, .5, .75, .9))
+det00qcz <- quantile(cz_df00$edchip_00, c(.1, .25, .5, .75, .9))
+det10qcz <- quantile(cz_df10$edchip_10, c(.1, .25, .5, .75, .9))
+
+det90qcz
+det00qcz
+det10qcz
+```
+
+```{r}
+# District Specific DF's
+
+# 1990
+
+dist_90 <- fss_e1990 %>%
+  group_by(State, district_code, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin))
+
+# 2000
+
+dist_00 <- fss_e2000 %>%
+  group_by(State, district_code, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin))
+
+# 2010
+
+dist_10 <- fss_e2010 %>%
+  group_by(State, district_code, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin))
+
+
+```
+
+
+```{r}
+# Creating Quantile Region DF's
+
+# DER
+
+col_select <- c("czone", "fipstate", "State", "district_code", "fipscty",
+                "cty_name", "delta_exp_robs", "china_deltaip",
+                "man_sh", "bach_plus", "sh_routine",
+                "beg_party", "end_party",
+                "unopposed_beg", "unopposed_end",
+                "gop_prop_beg", "gop_delta_sh",
+                "dem_prop_beg", "dem_delta_sh",
+                "win_prop_beg", "win_prty_delta_sh", "delta_win_margin")
+
+
+
+# 1990
+
+der90_10th_df <- fss_e1990[fss_e1990$eder_90 <= der90qcz[1],c(col_select, "eder_90", "edchip_90")]
+
+der90_25th_df <- fss_e1990[fss_e1990$eder_90 <= der90qcz[2],c(col_select, "eder_90", "edchip_90")]
+
+der90_iqr_df <- fss_e1990[(der90qcz[2] <= fss_e1990$eder_90) <= der90qcz[4], c(col_select, "eder_90", "edchip_90")]
+
+der90_75th_df <- fss_e1990[der90qcz[4] <= fss_e1990$eder_90, c(col_select, "eder_90", "edchip_90")]
+
+der90_90th_df <- fss_e1990[fss_e1990$eder_90 >= der90qcz[5],c(col_select, "eder_90", "edchip_90")]
+
+
+
+# 2000
+
+der00_10th_df <- fss_e2000[fss_e2000$eder_00 <= der00qcz[1],c(col_select, "eder_00", "edchip_00")]
+
+der00_25th_df <- fss_e2000[fss_e2000$eder_00 <= der00qcz[2],c(col_select, "eder_00", "edchip_00")]
+
+der00_iqr_df <- fss_e2000[(der00qcz[2] <= fss_e2000$eder_00) <= der00qcz[4], c(col_select, "eder_00", "edchip_00")]
+
+der00_75th_df <- fss_e2000[der00qcz[3] <= fss_e2000$eder_00,c(col_select, "eder_00", "edchip_00")]
+
+der00_90th_df <- fss_e2000[fss_e2000$eder_00 >= der00qcz[5],c(col_select, "eder_00", "edchip_00")]
+
+
+
+# 2010
+
+der10_10th_df <- fss_e2010[fss_e2010$eder_10 <= der10qcz[1], c(col_select, "eder_10", "edchip_10")]
+
+der10_25th_df <- fss_e2010[fss_e2010$eder_10 <= der10qcz[2], c(col_select, "eder_10", "edchip_10")]
+
+der10_iqr_df <- fss_e2010[(der10qcz[2] < fss_e2010$eder_10) < der10qcz[4], c(col_select, "eder_10", "edchip_10")]
+
+der10_75th_df <- fss_e2010[fss_e2010$eder_10 >= der10qcz[4], c(col_select, "eder_10", "edchip_10")]
+
+der10_90th_df <- fss_e2010[fss_e2010$eder_10 >= der10qcz[5], c(col_select, "eder_10", "edchip_10")]
+```
+
+
+
+```{r}
+# Examining Location Trends
+
+inspected_cols <- c("State", "district_code","cty_name",
+                    "beg_party","end_party",
+                    "gop_prop_beg", "gop_delta_sh",
+                    "dem_prop_beg", "dem_delta_sh",
+                    "win_prty_delta_sh", "delta_win_margin")
+```
+
+
+```{r}
+# 1990 75th Quantile
+
+
+der90_75th_lt_df <- der90_75th_df %>%
+  group_by(State, district_code, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin)
+  )
+
+
+der90_75th_lt_GOP <- der90_75th_lt_df[,c("State", "district_code",
+                    "beg_party","end_party",
+                    "gop_prop_beg", "gop_delta_sh", "win_prty_delta_sh")]
+
+der90_75th_lt_DEM <- der90_75th_lt_df[,c("State", "district_code",
+                    "beg_party","end_party",
+                    "dem_prop_beg", "dem_delta_sh", "win_prty_delta_sh")]
+
+der90_75th_lt_DWM <- der90_75th_lt_df[,c("State", "district_code",
+                    "beg_party","end_party",
+                    "delta_win_margin", "win_prty_delta_sh")]
+```
+
+
+
+```{r}
+dist_90 %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+# 1990 90th Quantile
+
+
+der90_90th_lt_df <- der90_90th_df %>%
+  group_by(State, district_code, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin)
+  )
+
+
+der90_90th_lt_GOP <- der90_90th_lt_df[,c("State", "district_code",
+                    "beg_party","end_party",
+                    "gop_prop_beg", "gop_delta_sh", "win_prty_delta_sh")]
+
+der90_90th_lt_DEM <- der90_90th_lt_df[,c("State", "district_code",
+                    "beg_party","end_party",
+                    "dem_prop_beg", "dem_delta_sh", "win_prty_delta_sh")]
+
+der90_90th_lt_DWM <- der90_90th_lt_df[,c("State", "district_code",
+                    "beg_party","end_party",
+                    "delta_win_margin", "win_prty_delta_sh")]
+```
+
+```{r}
+der90_75th_lt_df %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+der90_90th_lt_df %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+
+
+
+
+
+

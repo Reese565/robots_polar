@@ -1,0 +1,421 @@
+---
+title: "Industry Level EDA"
+author: "Maurice Williams"
+date: "12/12/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+library(cowplot)
+library(corrplot)
+library(AER)
+
+source("../scripts/functions.R")
+load("eda2.RData")
+```
+
+```{r}
+# US Robots
+
+us_ifr <- read.csv("../data/ifr/NA/NA.csv",
+                  stringsAsFactors = F,
+                  na.strings = '')
+us_ifr <- build_ifr(us_ifr)
+us_rpw90 <- rob_per_worker(cbp90n, us_ifr)
+us_rpw00 <- rob_per_worker(cbp00n, us_ifr)
+```
+
+```{r}
+# US Employment
+
+cbp90 <- cbpdd_build()
+cbp90n <- national_isic(cbp90)
+cbp90n$prop <- cbp90n$emp/sum(cbp90n$emp)
+cbp90c <- county_emp(cbp90)
+cbp90czind <- ind_cz_emp(cbp90)
+cbp90czindp <- cz_ind_prop(cbp90)
+```
+
+```{r}
+
+# Europe IFR Data
+
+eu_ifr <- list.files('../data/ifr/Europe', pattern='*.csv', full.names=T)
+eu_ifr_dfl <- lapply(eu_ifr, read.csv, stringsAsFactors = F, na.string = '')
+eu_ifr <- gsub('[^A-Z]','', eu_ifr)
+names(eu_ifr_dfl) <- gsub('^.','', eu_ifr)
+eu_ifr_dfl <- lapply(eu_ifr_dfl, build_ifr)
+
+eu_rpw95 <- list()
+eu_rpw.c <- data.frame(matrix(rep(0, 25), nrow = 1))
+
+countries <- names(eu_ifr_dfl)
+
+for (country in countries){
+  euklems <- euklems_dfl[[country]]
+  ifr <- eu_ifr_dfl[[country]]
+  rpw <- rob_per_worker(euklems, ifr)
+  eu_rpw95[[country]] <- rpw
+
+  rpw$country <- country
+  rpw <- rpw %>% select(country, everything())
+  rpw <- rpw[,-c(2,3)]
+  colnames(eu_rpw.c) <- colnames(rpw)
+  eu_rpw.c <- rbind(eu_rpw.c, rpw[1,])
+
+  if (country == countries[length(countries)]){
+    eu_rpw.c <- eu_rpw.c[-1,]
+  }
+}
+```
+
+```{r}
+isic_group <- eu_rpw95[[1]][,1]
+eu_industry_dfl <- list()
+
+for (grp in isic_group){
+  eu_industry_dfl[[grp]] <- data.frame(matrix(rep(0, 24), nrow = 1))
+  colnames(eu_industry_dfl[[grp]]) <- colnames(eu_rpw95[[1]][,-c(1,2)])
+  eu_industry_dfl[[grp]][["isic"]] <- "Empty"
+  for (df in eu_rpw95){
+    eu_industry_dfl[[grp]] <-  rbind(eu_industry_dfl[[grp]] ,df[df$isic == grp,-2])
+  }
+  eu_industry_dfl[[grp]] <- eu_industry_dfl[[grp]][-1,]
+}
+
+eu_industry_dfl <- df_l
+
+
+eu_industry_df <- data.frame(matrix(rep(0, 24), nrow = 1))
+colnames(eu_industry_df) <- colnames(eu_rpw95[[1]][,-c(1,2)])
+eu_industry_df[["isic"]] = "Empty"
+
+for (df in eu_industry_dfl){
+  df_quantile <- apply(df[,-25], MARGIN = 2, quantile, 0.5)
+  df_quantile$isic <- df$isic[1]
+  eu_industry_df <- rbind(eu_industry_df, df_quantile)
+}
+```
+
+```{r}
+eu_industry_dfd <- eu_industry_df[-1,] %>% select(isic, everything())
+eu_industry_matt <- t(eu_industry_dfd[,-1])
+
+industry_titles <- c("total", "Food, Beverages, Tobacco", "Textiles and Apparel", "Wood and Paper",
+                     "Chemicals and Petro", "Plastics and non-Metallics",
+                     "Basic and Fabricated Metals", "Electronics", "Machinery",
+                     "Auto and Transport","Other Man.", "Agriculture",
+                     "Mining", "Utilities", "Construction", "Education","Other Non-Man.")
+
+colnames(eu_industry_matt) <- industry_titles
+
+rownames(eu_industry_matt) <- NULL
+eu_industry_dft <- as.data.frame(eu_industry_matt)
+
+eu_industry_dft_tidy <- gather(eu_industry_dft,
+                               key = industry,
+                               value = rpw)
+eu_industry_dft_tidy$year <- rep(1993:2016, 17)
+```
+
+```{r}
+eu_industry_dft_tidy %>%
+  ggplot(aes(x = year, y = rpw, col = industry)) +
+  geom_line() +
+  theme(legend.position = "none")
+```
+
+```{r}
+eu_industry_dft_tidy[eu_industry_dft_tidy$industry != "Auto and Transport",] %>%
+  ggplot(aes(x = year, y = rpw, col = industry)) +
+  geom_line() +
+  theme(legend.position = "bottom",
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=9))
+```
+
+
+```{r}
+us_rpw90_df <- us_rpw90 %>% select(isic, everything())
+us_rpw90_mat <- t(us_rpw90_df[,-1])
+
+colnames(us_rpw90_mat) <- industry_titles
+rownames(us_rpw90_mat) <- NULL
+
+us_rpw90_dft <- as.data.frame(us_rpw90_mat[-(1:12),])
+
+us_rpw90_dft_tidy <- gather(us_rpw90_dft,
+                               key = industry,
+                               value = rpw)
+us_rpw90_dft_tidy$year <- rep(2004:2016, 17)
+```
+
+```{r}
+us_rpw90_dft_tidy %>%
+  ggplot(aes(x = year, y = rpw, col = industry)) +
+  geom_line() +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+elim_bool <- us_rpw90_dft_tidy$industry != "total"
+elim_bool <- elim_bool & us_rpw90_dft_tidy$industry != "Education"
+elim_bool <- elim_bool & us_rpw90_dft_tidy$industry != "Agriculture"
+elim_bool <- elim_bool & us_rpw90_dft_tidy$industry != "Other Non-Man."
+elim_bool <- elim_bool & us_rpw90_dft_tidy$industry != "Mining"
+elim_bool <- elim_bool & us_rpw90_dft_tidy$industry != "Construction"
+elim_bool <- elim_bool & us_rpw90_dft_tidy$industry != "Utilities"
+
+us_rpw90_dft_tidy[elim_bool,] %>%
+  ggplot(aes(x = year, y = rpw, col = industry)) +
+  geom_line() +
+  theme(legend.position = "bottom",
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=9))
+```
+
+```{r}
+elim_bool2 <- elim_bool & us_rpw90_dft_tidy$industry != "Auto and Transport"
+
+
+us_rpw90_dft_tidy[elim_bool2,] %>%
+  ggplot(aes(x = year, y = rpw, col = industry)) +
+  geom_line() +
+  theme(legend.position = "bottom",
+        legend.title = element_text(size=10),
+        legend.text = element_text(size=9))
+```
+
+
+
+
+
+
+```{r}
+industry_outputs <- read.csv("../data/us_census/m3/naicsvsp.csv", header = F)
+industry_outputs <- industry_outputs %>%
+  mutate(output = rowSums(.[3:14])) %>%
+  select(1,2,output)
+colnames(industry_outputs) <- c("sector", "year", "output")
+industry_outputs <- industry_outputs[str_detect(industry_outputs$sector, "^A"),]
+industry_outputs$sector <- str_replace(industry_outputs$sector, "^[A-Z]", "")
+vship_bool <- str_detect(industry_outputs$sector, "VS$")
+industry_outputs <- industry_outputs[vship_bool,]
+industry_outputs$sector <- str_replace(industry_outputs$sector, "VS$", "")
+industry_outputs
+```
+
+```{r}
+naics.prefix = c('^1[12]S', '1[3-6]S', '2[1-3]S', '2[4-5]S',
+                 '2[6-7]S', '3[1-2]S', '33S', '3[4-5]S',
+                 '36S', '3[7-9]S')
+  
+  isic.rep = c('10-12', '13-15','16-18','19-21',
+               '22-23', '24-25','28','26-27',
+               '29-30', '31-33')
+  
+  industry_outputs$isic <- industry_outputs$sector
+  
+  for (i in 1:10){
+    prefx = naics.prefix[i]
+    sub = isic.rep[i]
+    industry_outputs$isic <- str_replace(industry_outputs$isic, prefx, sub)
+  }
+
+  
+ind_isic_outputs <- industry_outputs[industry_outputs$isic %in% isic.rep,] %>%
+  select(isic, year, output) %>%
+  filter(year <= 2017, year >= 1980)
+
+ind_isic_outputs <- ind_isic_outputs %>%
+  group_by(isic, year) %>%
+  summarise(output = sum(output)/10^3)
+```
+
+```{r}
+ind_outputs_plot <- ind_isic_outputs %>%
+  ggplot(aes(x = year, y = output, col = isic)) +
+  geom_smooth(se = F, span = 0.38, size=0.5) +
+#  geom_line() +
+  scale_y_continuous(name = "Value of Shipments (millions)") +
+  scale_x_continuous(name = "Year", breaks = seq(1980,2016,4)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(margin = margin(r = 30, unit = "pt"),
+                                   size=10),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+ind_outputs_plot
+```
+
+```{r}
+roboticized <- ind_isic_outputs$isic %in% c("10-12", "19-21", "22-23", "24-25", "26-27", "28", "31-33")
+
+ind_outs_plot <- ind_isic_outputs[roboticized,] %>%
+  ggplot(aes(x = year, y = output, col = isic)) +
+  geom_smooth(se = F, span = 0.38, size=0.5) +
+  scale_y_continuous(name = "Value of Shipments (millions)") +
+  scale_x_continuous(name = "Year", breaks = seq(1980,2017,4)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(margin = margin(r = 30, unit = "pt"),
+                                   size=10),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+ind_outs_plot
+```
+
+```{r echo = F}
+pdf("../outputs/plots/ind_outs_plot.pdf", width=10, height=8)
+ind_outs_plot
+dev.off()
+```
+
+```{r}
+man_outputs <- ind_isic_outputs %>%
+  group_by(year) %>%
+  summarise(output = sum(output))
+
+man_out_plot <- man_outputs %>%
+  ggplot(aes(x = year, y = output)) +
+  geom_smooth(se = F, span = 0.38, col = "lightcoral", size=0.5) +
+  scale_y_continuous(name = "Value of Shipments (millions)") +
+  scale_x_continuous(name = "Year", breaks = seq(1994,2016,2)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+man_out_plot
+```
+
+```{r echo = F}
+pdf("../outputs/plots/man_ouput.pdf", width=9, height=5)
+man_out_plot
+dev.off()
+```
+
+```{r}
+man_emp <- read.csv("../data/fred/MANEMP.csv", stringsAsFactors = F)
+colnames(man_emp) <- c("year", "emp")
+man_emp <- man_emp[str_detect(man_emp$year, "-12-..$"),]
+man_emp$year <- str_replace_all(man_emp$year, "-.+-.+$", "")
+#man_emp$emp <- man_emp$emp/10^3
+man_emp$year <- 1990:2017
+
+man_emp_plot <- man_emp %>%
+  ggplot(aes(x = year, y = emp)) +
+  geom_smooth(se = F, span = 0.38, col = "lightblue", size=0.5) +
+  scale_y_continuous(name = "Employment (thousands)") +
+  scale_x_continuous(name = "Year", breaks = seq(1990,2017,3)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+  
+  
+man_emp_plot
+```
+
+
+```{r echo = F}
+pdf("../outputs/plots/man_emp.pdf", width=9, height=5)
+man_emp_plot
+dev.off()
+```
+
+```{r echo = F}
+pdf("../outputs/plots/manuf_plot.pdf", width=9, height=12)
+plot_grid(man_out_plot,man_emp_plot, ncol = 1, align = "h")
+dev.off()
+```
+
+
+```{r}
+man_df <- merge(man_emp, man_outputs, by = "year")
+
+man_df_tidy <- gather(man_df[,c("emp", "output")])
+man_df_tidy$year <- rep(1993:2017, 2)
+
+man_df_tidy$key[man_df_tidy$key == "emp"] = "Employment"
+man_df_tidy$key[man_df_tidy$key == "output"] = "Value of Shipments"
+
+man_df_tidy[man_df_tidy$year >=2004,] %>%
+  ggplot(aes(x = year, value, col = key)) +
+  geom_line() +
+  facet_wrap(~ key, ncol = 2) +
+  facet_grid(key ~ ., scales = "free_y") +
+  scale_x_continuous(breaks = seq(1993,2016,2)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        strip.text.y = element_text(size = 8),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+```
+```{r}
+ind_output = read.csv('../data/NBER-CES/sic5811.csv', stringsAsFactors = F)
+ind_output <- ind_output %>% select(sic87, year, emp)
+colnames(ind_output) <- c("sic", "year", "emp")
+ind_output <- ind_output %>% filter(year >= 1980)
+
+save_bool <- str_detect(ind_output$sic, "^25[12349][0179]")
+ind_output$sic[!save_bool] <- str_replace_all(ind_output$sic[!save_bool],"[0-9]{2}$", "00")
+
+ind_emp_isic <- assign_isic(ind_output, ind_code = "sic")
+ind_emp_isic$emp[is.na(ind_emp_isic$emp)] <- 0
+ind_emp_isic <- ind_emp_isic %>%
+  group_by(year, isic) %>%
+  summarise(emp = sum(emp)) %>%
+  filter(year >=1980)
+```
+
+
+```{r}
+roboticized2 <- ind_emp_isic$isic %in% c("10-12", "19-21", "22-23", "24-25", "26-27", "28", "31-33")
+
+ind_emp_plot <- ind_emp_isic[roboticized2,] %>%
+  ggplot(aes(x = year, y = emp, col = isic)) +
+  geom_line() +
+  scale_y_continuous(name ="Employment (thousands)",breaks = seq(500,4000,500)) +
+  scale_x_continuous(name = "Year", breaks = seq(1980,2011,3)) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(margin = margin(r = 30, unit = "pt"),
+                                   size=10),
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+ind_emp_plot
+```
+
+```{r echo = F}
+pdf("../outputs/plots/ind_emp_plot.pdf", width=10, height=7)
+ind_emp_plot
+dev.off()
+```
+
+```{r}
+labor_share <- read.csv("../data/fred/PRS85006173.csv", stringsAsFactors = F)
+labor_share
+```
+
+
+
+
+

@@ -1,0 +1,490 @@
+---
+title: "District Level EDA"
+author: "Maurice Williams"
+date: "12/12/2018"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+library(cowplot)
+library(corrplot)
+library(AER)
+library(tools)
+
+source("../scripts/functions.R")
+load("eda2.RData")
+```
+
+```{r}
+cw_fips_cty_name <- read.csv("../data/cw/cw_fips_ctyname.csv", stringsAsFactors = F)
+cw_fips_cty_name$cty_name <- tolower(cw_fips_cty_name$cty_name)
+cw_fips_cty_name$cty_name <- toTitleCase(cw_fips_cty_name$cty_name)
+
+```
+
+```{r}
+fss_e <- read.dta("../outputs/data/fss_e.dta")
+fss_e <- merge(fss_e, cw_fips_cty_name, by = "fipscty", all = F)
+fss_e1990 <- fss_e[fss_e$census == 1990, ]
+fss_e2000 <- fss_e[fss_e$census == 2000, ]
+fss_e2010 <- fss_e[fss_e$census == 2010, ]
+#fss_e[fss_e$fipstate == 26,]
+```
+
+```{r}
+cz_df <- read.dta("../outputs/data/fsscz_e.dta")
+cz_df90 <- cz_df[cz_df$census == 1990, ]
+cz_df00 <- cz_df[cz_df$census == 2000, ]
+cz_df10 <- cz_df[cz_df$census == 2010, ]
+```
+
+```{r}
+# Exogenous Delta Exposure Robs Quantiles
+der90qcz <- quantile(cz_df90$eder_90, c(.1, .25, .5, .75, .9))
+der00qcz <- quantile(cz_df00$eder_00, c(.1, .25, .5, .75, .9))
+der10qcz <- quantile(cz_df10$eder_10, c(.1, .25, .5, .75, .9))
+
+der90qcz
+der00qcz
+der10qcz
+```
+
+```{r}
+# Delta Chinese Import Penetration Quantiles
+det90qcz <- quantile(cz_df90$edchip_90, c(.1, .25, .5, .75, .9))
+det00qcz <- quantile(cz_df00$edchip_00, c(.1, .25, .5, .75, .9))
+det10qcz <- quantile(cz_df10$edchip_10, c(.1, .25, .5, .75, .9))
+
+det90qcz
+det00qcz
+det10qcz
+```
+
+```{r}
+# District Specific DF's
+
+# 1990
+
+dist_90 <- fss_e1990 %>%
+  group_by(State, district_code, dist_id, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin),
+            nominate_beg = mean(nominate_beg),
+            nominate_end = mean(nominate_end),
+            delta_nom = mean(delta_nom))
+
+# 2000
+
+dist_00 <- fss_e2000 %>%
+  group_by(State, district_code, dist_id, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin),
+            nominate_beg = mean(nominate_beg),
+            nominate_end = mean(nominate_end),
+            delta_nom = mean(delta_nom))
+
+# 2010
+
+dist_10 <- fss_e2010 %>%
+  group_by(State, district_code, dist_id, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin),
+            nominate_beg = mean(nominate_beg),
+            nominate_end = mean(nominate_end),
+            delta_nom = mean(delta_nom))
+
+
+```
+
+
+```{r}
+# Creating Quantile Region DF's
+
+# DER
+
+col_select <- c("czone", "fipstate", "State", "district_code", "dist_id",
+                "fipscty", "cty_name", "delta_exp_robs", "china_deltaip",
+                "man_sh", "bach_plus", "sh_routine",
+                "beg_party", "end_party","delta_nom",
+                "nominate_beg", "nominate_end", 
+                "unopposed_beg", "unopposed_end",
+                "gop_prop_beg", "gop_delta_sh",
+                "dem_prop_beg", "dem_delta_sh",
+                "win_prop_beg", "win_prty_delta_sh", "delta_win_margin")
+
+
+
+# 1990
+
+der90_10th_df <- fss_e1990[fss_e1990$eder_90 <= der90qcz[1],c(col_select, "eder_90", "edchip_90")]
+
+der90_25th_df <- fss_e1990[fss_e1990$eder_90 <= der90qcz[2],c(col_select, "eder_90", "edchip_90")]
+
+der90_iqr_df <- fss_e1990[(der90qcz[2] <= fss_e1990$eder_90) <= der90qcz[4], c(col_select, "eder_90", "edchip_90")]
+
+der90_75th_df <- fss_e1990[der90qcz[4] <= fss_e1990$eder_90, c(col_select, "eder_90", "edchip_90")]
+
+der90_90th_df <- fss_e1990[fss_e1990$eder_90 >= der90qcz[5],c(col_select, "eder_90", "edchip_90")]
+
+der90q_dfl <- list(q10_df = der90_10th_df,
+                  q25_df = der90_25th_df,
+                  iqr_df = der90_iqr_df,
+                  q75_df = der90_75th_df,
+                  q90_df = der90_90th_df)
+
+# 2000
+
+der00_10th_df <- fss_e2000[fss_e2000$eder_00 <= der00qcz[1],c(col_select, "eder_00", "edchip_00")]
+
+der00_25th_df <- fss_e2000[fss_e2000$eder_00 <= der00qcz[2],c(col_select, "eder_00", "edchip_00")]
+
+der00_iqr_df <- fss_e2000[(der00qcz[2] <= fss_e2000$eder_00) <= der00qcz[4], c(col_select, "eder_00", "edchip_00")]
+
+der00_75th_df <- fss_e2000[der00qcz[3] <= fss_e2000$eder_00,c(col_select, "eder_00", "edchip_00")]
+
+der00_90th_df <- fss_e2000[fss_e2000$eder_00 >= der00qcz[5],c(col_select, "eder_00", "edchip_00")]
+
+der00q_dfl <- list(q10_df = der00_10th_df,
+                  q25_df = der00_25th_df,
+                  iqr_df = der00_iqr_df,
+                  q75_df = der00_75th_df,
+                  q90_df = der00_90th_df)
+
+# 2010
+
+der10_10th_df <- fss_e2010[fss_e2010$eder_10 <= der10qcz[1], c(col_select, "eder_10", "edchip_10")]
+
+der10_25th_df <- fss_e2010[fss_e2010$eder_10 <= der10qcz[2], c(col_select, "eder_10", "edchip_10")]
+
+der10_iqr_df <- fss_e2010[(der10qcz[2] < fss_e2010$eder_10) < der10qcz[4], c(col_select, "eder_10", "edchip_10")]
+
+der10_75th_df <- fss_e2010[fss_e2010$eder_10 >= der10qcz[4], c(col_select, "eder_10", "edchip_10")]
+
+der10_90th_df <- fss_e2010[fss_e2010$eder_10 >= der10qcz[5], c(col_select, "eder_10", "edchip_10")]
+
+der10q_dfl <- list(q10_df = der10_10th_df,
+                  q25_df = der10_25th_df,
+                  iqr_df = der10_iqr_df,
+                  q75_df = der10_75th_df,
+                  q90_df = der10_90th_df)
+```
+
+
+
+```{r}
+# Examining Location Trends
+
+inspected_cols <- c("State","district_code",
+                    "dist_id","cty_name",
+                    "beg_party","end_party",
+                    "gop_prop_beg", "gop_delta_sh",
+                    "dem_prop_beg", "dem_delta_sh",
+                    "win_prty_delta_sh", "delta_win_margin")
+```
+
+
+
+```{r}
+
+# District DFs
+
+# 1990 
+
+der90q_ddfl <- list()
+
+for (df in names(der90q_dfl)){
+  df_name <- paste0("sub", as.character(df))
+  der90q_ddfl[[df_name]] <- der90q_dfl[[df]] %>%
+  group_by(State, district_code, dist_id, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin),
+            nominate_beg = mean(nominate_beg),
+            nominate_end = mean(nominate_end),
+            delta_nom = mean(delta_nom))
+}
+
+# 2000
+
+der00q_ddfl <- list()
+
+for (df in names(der00q_dfl)){
+  df_name <- paste0("sub", as.character(df))
+  der00q_ddfl[[df_name]] <- der00q_dfl[[df]] %>%
+  group_by(State, district_code, dist_id, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin),
+            nominate_beg = mean(nominate_beg),
+            nominate_end = mean(nominate_end),
+            delta_nom = mean(delta_nom))
+}
+
+# 2010
+
+der10q_ddfl <- list()
+
+for (df in names(der10q_dfl)){
+  df_name <- paste0("sub", as.character(df))
+  der10q_ddfl[[df_name]] <- der10q_dfl[[df]] %>%
+  group_by(State, district_code, dist_id, beg_party, end_party) %>%
+  summarise(gop_prop_beg = mean(gop_prop_beg),
+            gop_delta_sh = mean(gop_delta_sh),
+            dem_prop_beg = mean(dem_prop_beg),
+            dem_delta_sh = mean(dem_delta_sh),
+            win_prty_delta_sh = mean(win_prty_delta_sh),
+            delta_win_margin = mean(delta_win_margin),
+            nominate_beg = mean(nominate_beg),
+            nominate_end = mean(nominate_end),
+            delta_nom = mean(delta_nom))
+}
+```
+
+```{r}
+loc90_90th_df <- unique(der90q_dfl$q90_df[,c("State", "cty_name", "beg_party", "win_prty_delta_sh")])
+```
+
+```{r}
+dist_90 %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+der90q_ddfl$subq75_df %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+
+```{r}
+der90q_ddfl$subiqr_df %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+
+```{r}
+dist_00 %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+der00q_ddfl$subq90_df %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+dist_10 %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+der10q_ddfl$subq90_df %>%
+  group_by(beg_party, end_party) %>%
+  count()
+```
+
+```{r}
+# Where and Why? No turnover
+
+why <- der10q_ddfl$subq90_df[,-c(6,7,8,9,10)] %>% print(n=113)
+```
+
+
+```{r}
+# High Exposure comparison Df's
+
+der90_compdf <- merge(der90q_dfl$q75_df, der00q_dfl$q75_df,
+      by = c("czone","dist_id", "State","fipstate", "fipscty", "cty_name"))
+der90_compdf <- der90_compdf %>%
+  mutate(party92 = beg_party.x,
+         party00 = end_party.x,
+         party01 = beg_party.y,
+         party10 = end_party.y) %>%
+  select(czone, dist_id, State, fipstate, fipscty,
+         cty_name, party92, party00,
+         party01, party10)
+
+der90_compdf <- merge(der90_compdf, der10q_dfl$q75_df,
+                      by = c("czone","dist_id", "State",
+                             "fipstate", "fipscty", "cty_name"))
+der90_compdf <- der90_compdf %>%
+  mutate(party11 = beg_party, party16 = end_party) %>%
+    select(czone, dist_id, State, fipstate, fipscty,
+         cty_name, party92, party00,
+         party01, party10, party11, party16)
+```
+
+```{r}
+
+der90_compddf <- der90_compdf %>%
+  group_by(fipstate, State, dist_id,
+           party92, party00,
+         party01, party10, party11, party16) %>%
+  summarise(temp = 1)
+der90_compddf <- der90_compddf[,-10]
+
+der90_compddf_counts <- der90_compddf %>%
+  group_by(party92, party00,
+         party01, party10, party11, party16) %>%
+  count()
+```
+
+```{r}
+party_trans90q92 <-der90_compddf %>%
+  group_by(party92) %>%
+  count()
+colnames(party_trans90q92) <- c("party", "count")
+party_trans90q92$year <- rep(1992,2)
+party_trans90q92 <- as.data.frame(party_trans90q92)
+
+
+party_trans90q00 <-der90_compddf %>%
+  group_by(party00) %>%
+  count()
+colnames(party_trans90q00) <- c("party", "count")
+party_trans90q00$year <- rep(2000)
+party_trans90q00 <- as.data.frame(party_trans90q00)
+
+
+party_trans90q01 <-der90_compddf %>%
+  group_by(party01) %>%
+  count()
+colnames(party_trans90q01) <- c("party", "count")
+party_trans90q01$year <- rep(2001,2)
+party_trans90q01 <- as.data.frame(party_trans90q01)
+
+
+party_trans90q10 <-der90_compddf %>%
+  group_by(party10) %>%
+  count()
+colnames(party_trans90q10) <- c("party", "count")
+party_trans90q10$year <- rep(2010,2)
+party_trans90q10 <- as.data.frame(party_trans90q10)
+
+
+party_trans90q11 <-der90_compddf %>%
+  group_by(party11) %>%
+  count()
+colnames(party_trans90q11) <- c("party", "count")
+party_trans90q11$year <- rep(2011)
+party_trans90q11 <- as.data.frame(party_trans90q11)
+
+
+party_trans90q16 <-der90_compddf %>%
+  group_by(party16) %>%
+  count()
+colnames(party_trans90q16) <- c("party", "count")
+party_trans90q16$year <- rep(2016,2)
+party_trans90q16 <- as.data.frame(party_trans90q16)
+
+
+party_trans90q <- rbind(party_trans90q92, party_trans90q00)
+party_trans90q <- rbind(party_trans90q, party_trans90q01)
+party_trans90q <- rbind(party_trans90q, party_trans90q10)
+party_trans90q <- rbind(party_trans90q, party_trans90q11)
+party_trans90q <- rbind(party_trans90q, party_trans90q16)
+```
+
+```{r}
+party_trans_plot <- party_trans90q %>%
+  ggplot(aes(factor(year),y = count, fill = factor(party))) +
+  geom_col(position = position_dodge(preserve = "total", width = 1)) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  xlab("Year") +
+  ylab("House Seats") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(margin = margin(r = 30, unit = "pt"),
+                                   size=10),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        plot.title = element_text(size=10, face = "plain"),
+        panel.grid.major.y = element_line( size=.1, color="gray65" )) +
+  labs(title = "House Seats by Party in 90th Quantile of Exposure to Robots 1992-2016")
+
+party_trans_plot
+```
+
+
+```{r echo = F}
+pdf("../outputs/plots/party_trans.pdf", width=9, height=5)
+party_trans_plot
+dev.off()
+```
+
+
+
+
+
+
+```{r}
+house_elections <- read.csv("../data/cqpress/house/he_full.csv", stringsAsFactors =  F)
+```
+
+
+```{r}
+house_elct_prty <- house_elections[house_elections$unopposed ==0,] %>%
+  group_by(raceYear) %>%
+  summarise(GOP = mean(gop_prop),
+            Democrats = mean(dem_prop))
+
+house_elct_prty.tidy <- gather(house_elct_prty[,c("GOP", "Democrats")],key = "party", value = "vote_share")
+
+house_elct_prty.tidy$year <- rep(seq(1992,2016,2),2)
+
+house_elct_prty.tidy %>%
+  ggplot(aes(x = year, y = vote_share, col = party)) +
+  geom_smooth(se = F, span = 0.425) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(breaks = seq(1992,2016,4))
+```
+
+```{r}
+house_elct_prty2 <- house_elections[house_elections$unopposed == 0,] %>%
+  group_by(raceYear, gop_win) %>%
+  summarise(GOP = mean(gop_prop),
+            Democrats = mean(dem_prop))
+
+house_elct_prty3 <- house_elections[house_elections$unopposed == 0,] %>%
+  group_by(raceYear) %>%
+  summarise(win_vs = mean(win_prop))
+
+house_elct_prty3 %>%
+  ggplot(aes(x=raceYear, y = win_vs)) +
+  geom_smooth(se = F, span = 0.4)
+```
+
+
+
+
+

@@ -1,0 +1,278 @@
+---
+title: "Industrial Automation and Political Polarization"
+subtitle: "Insturmental Validity"
+author: "Maurice Williams"
+date: "Novermber 11, 2018"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+source("../scripts/functions.R")
+```
+
+
+```{r echo = FALSE}
+# CBP Data (w/DDorn estimates)
+cbp90 = cbpdd_build()
+
+cbp90n = national_isic(cbp90)
+
+cbp90c = county_emp(cbp90)
+
+cbp90czind = ind_cz_emp(cbp90)
+cbp90czindp = cz_ind_prop(cbp90)
+cbp90czindp_cty = cz.fips_data(cbp90czindp)
+
+
+# EUKLEMS Data
+euklems = list.files('../data/eu_klems', pattern="*.csv", full.names=TRUE)
+euklems_dfl = lapply(euklems, read.csv, stringsAsFactors = F)
+names(euklems_dfl) = gsub('[^A-Z]','', euklems)
+eu_bool = names(euklems_dfl) != 'US'
+euklems_dfl = euklems_dfl[eu_bool]
+euklems_dfl = lapply(euklems_dfl, euklems_clean, base = '1995')
+
+
+# IFR Data
+us_ifr = read.csv("../data/ifr/NA/NA.csv",
+                  stringsAsFactors = F,
+                  na.strings = '')
+us_ifr = build_ifr(us_ifr)
+us_rpw90 = rob_per_worker(cbp90n, us_ifr)
+
+eu_ifr = list.files('../data/ifr/Europe', pattern='*.csv', full.names=T)
+eu_ifr_dfl = lapply(eu_ifr, read.csv, stringsAsFactors = F, na.string = '')
+eu_ifr = gsub('[^A-Z]','', eu_ifr)
+names(eu_ifr_dfl) = gsub('^.','', eu_ifr)
+eu_ifr_dfl = lapply(eu_ifr_dfl, build_ifr)
+
+eu_rpw95 = list()
+eu_rpw.c = data.frame(matrix(rep(0, 25), nrow = 1))
+
+countries = names(eu_ifr_dfl)
+
+for (country in countries){
+  euklems = euklems_dfl[[country]]
+  ifr = eu_ifr_dfl[[country]]
+  rpw = rob_per_worker(euklems, ifr)
+  eu_rpw95[[country]] = rpw
+  
+  rpw$country = country
+  rpw = rpw %>% select(country, everything())
+  rpw = rpw[,-c(2,3)]
+  colnames(eu_rpw.c) = colnames(rpw)
+  eu_rpw.c = rbind(eu_rpw.c, rpw[1,])
+  
+  if (country == countries[length(countries)]){
+    eu_rpw.c = eu_rpw.c[-1,]
+  }
+}
+
+rownames(eu_rpw.c) = countries
+eu_rpw.c = eu_rpw.c[,-1]
+```
+
+
+\vspace{12pt}
+
+In their paper *Robots and Jobs*, Daron Acemoglu and Pascual Restrepo contruct a Bartik like instrument to estimate the effects of the increased national stock of industrial robots on wages and unemployment in commuting zones from 1993-2007. Similarly, David Autor and David Dorn us a Bartik like instrument to estimate the effect of increased import competiton on the ideological composition of the members of the House of Representatives from 2002-2010. The goal of my hypothesis is to use this same approach to estimate the impact of the rising stock of industrial robots on ideaological polarization in Congressional Representatives. My first step has been to reconstruct the exogenous *exposure to robots* variable of intrest described in the Acemoglu and Restrepo paper and the check the validity of the instruments for us in my second stage regressions.
+
+#Instrumental Approach
+
+The data on robots was acquired from the International Federation of Robotics (IFR) and shows the total stock of robots for a given country broken down by industry at approximately the two digit level. The data for the United States reaches back to 1993, but does not contain industry breakdown until 2004. In order to mesure the effects of robots on employment and wages prior to 2004, Acemoglu and Restrepo use the distribution of robotos per worker in each industry for a subset of European countries that provide industry breakdowns starting from 1993 and use this as an instrument for the US *exposure to robots* over the same time period. Motivated by this method, I take a similar approach in selecting data to use as an instrument for my analysis.
+
+###Quantile Selection
+
+In determining how to contruct my exogenous instrument, I follow in the path of the previous authors and compare the evolution of robots per worker in the United States with the average and a selected quantile across the subset of European countries in my sample (displayed in Figure 1). To construct robots per worker in Europe I combined the IFR datasets with employment data by industry from the EU KLEMS public use data. The employment data provided by EU KLEMS only goes back to 1995 for most of the countries in my analysis, and so we can expect the ratio of robots to workers to be lower than we would otherwise expect if we had employment figures from 1990. This has lead me to select a much higher quantile of the distribution of robots per workers across my subset of European countries (75th quantile) when compared to the quantile selected by Acemoglu and Restrepo in their analysis (30th quantile). However, I have decided that the disparity is within reason and proceed forward with my analysis.
+
+
+```{r echo = FALSE}
+# eu_rpw = as.numeric(eu_emp.rob.t[,-1])/as.numeric(eu_emp.rob.t[1])
+
+eu_rpw.avg = sapply(eu_rpw.c, MARGIN = 2, FUN = mean)
+
+eu_rpw.quantile = sapply(eu_rpw.c, MARGIN = 2, FUN = quantile, .75)
+
+rpwts = data.frame(us = as.numeric(us_rpw90[1,-1:-2]),
+                   eu.avg = as.numeric(eu_rpw.avg),
+                   eu.qunt = as.numeric(eu_rpw.quantile))
+colnames(rpwts) <- c("US", "Europe Average", "Europe 75th Quantile")
+
+rpwts_tidy = gather(rpwts, key = 'region', value = 'rpw')
+rpwts_tidy$year = rep(1993:2016, 3)
+```
+
+
+```{r echo = FALSE, fig.cap = "Total Robots Per Worker 1993-2016", fig.align="center", fig.asp = 0.65}
+rpw_us_eu_plot <- rpwts_tidy %>% ggplot(aes(x = year, y = rpw, col = region)) +
+  geom_line() +
+  geom_point(aes(shape = region)) +
+  scale_x_continuous(name = "Years",
+                     breaks = seq(1990,2020,5)) +
+  scale_color_manual(values=c("darkseagreen3", "darkseagreen4", "skyblue3")) +
+  scale_y_continuous(name = "Total Robots Per Worker (workers in thousands)",
+                     breaks = seq(0,4,0.5)) +
+  theme(legend.position = "bottom",
+       # legend.spacing.x = unit(0.5, 'cm'),
+        legend.text = element_text(margin = margin(r = 30, unit = "pt")),
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+rpw_us_eu_plot
+```
+
+```{r echo = F}
+pdf("../outputs/plots/rpw_us_eu_plot.pdf", width=10, height=7)
+rpw_us_eu_plot
+dev.off()
+```
+
+
+###Instrumental Validity
+
+The matching of the European quantiles of robots per worker is the described motivation behind the contruction of the exogenous *exposure to robots* variable in *Robots and Jobs*. My slection of the 75th quantile across European economies roughly matches that of the robots per worker in US over the same time period. However,  Given these observations and assumptions I posit the following first stage equation
+
+$$\sum_{i\in \mathcal{I}}l^{1990}_{ic}\bigg(\frac{R^{US}_{i,\tau_{2}}}{L_{i,1990}}-\frac{R^{US}_{i,\tau_{1}}}{L_{i,1990}}\bigg) =\pi\sum_{i\in \mathcal{I}}l^{1990}_{ic}\bigg(q_{75}\left(\frac{R_{i,\tau'_{2}}}{L_{i,1995}}\right)-q_{75}\left(\frac{R_{i,\tau'_{1}}}{L_{i,1995}}\bigg)\right) +\Gamma X_{d,t}+ v_{d}$$
+
+where the dependent variable is the change in *exposure to robots* measured as the difference between the stock of robots in industry $i$ between time periods $\tau_{1}$ and $\tau_{2}$ over national employment in industry $i$ weighted by $\mathcal{l}^{1990}_{ic}$, which is the share of employment in industry $i$ in commuting zone $c$ in the United States. Our instrument is the first variable defined as the change in the 75th quantile of *exposure to robots* of the subset of European countries across between time periods $\tau'_{1}$ and $\tau'_{2}$, and $X_{d,\tau_{1}}$ are a set of political, economic, and demographic controls for each county-congressional district cell at time period $t$, which is Census period covered.
+
+We estimate the above regression for three different time periods and determine the level instrument relevance.
+
+For the period covering congressional districts defined by the 1990 Census I use the following parameters time parameters
+
+- $\tau_{1}$=2004
+- $\tau_{1}$=2010
+- $\tau'_{1}$=1993
+- $\tau'_{2}$=2000
+
+The resulting first stage regression produced a highly significant and positive coefficient with an F-statistic of 2029.02.
+
+
+For the period covering congressional districts defined by the 2000 Census I use the following parameters time parameters
+
+- $\tau_{1}$=2004
+- $\tau_{1}$=2010
+- $\tau'_{1}$=2001
+- $\tau'_{2}$=2010
+
+The resulting first stage regression produced a highly significant and positive coefficient with an F-statistic of 827.69.
+
+For the period covering congressional districts defined by the 2010 Census I use the following parameters time parameters
+
+- $\tau_{1}$=2011
+- $\tau_{1}$=2016
+- $\tau'_{1}$=2011
+- $\tau'_{2}$=2016
+
+The resulting first stage regression produced a highly significant and positive coefficient with an F-statistic of 1257.48.
+
+
+These reults are encouraging that we have constructed an instrument that is close enough to the one described in the *Robots and Jobs* paper, and motivate me to move forward with my analysis using these instruments.
+
+
+
+```{r include = FALSE}
+eu_rpw93_00 = eu_rpw.c[c("DE", "DK", "ES", "FI", "FR", "IT", "UK"),1:8]
+eu_rpw93_00_avg = sapply(eu_rpw93_00, MARGIN = 2, FUN = mean)
+eu_rpw93_00_avg_qunt = sapply(eu_rpw93_00, MARGIN = 2, FUN = quantile, 0.75)
+
+rpwts93_00 = data.frame(us = as.numeric(us_rpw90[1,-1:-2][,1:8]),
+                   eu.avg = as.numeric(eu_rpw93_00_avg),
+                   eu.qunt = as.numeric(eu_rpw93_00_avg_qunt))
+
+rpwts_tidy93_00 = gather(rpwts93_00, key = 'region', value = 'rpw')
+rpwts_tidy93_00$year = rep(1993:2000, 3)
+
+rpwts_tidy93_00 %>% ggplot(aes(x = year, y = rpw, col = region)) +
+  geom_line() +
+  geom_point(aes(shape = region)) +
+  scale_x_continuous(breaks = seq(1990,2010,2))
+
+```
+
+```{r include = FALSE}
+eu_rpw00_10 = eu_rpw.c[c("DE", "DK", "ES", "FI", "FR", "IT", "UK"),9:18]
+eu_rpw00_10_avg = sapply(eu_rpw00_10, MARGIN = 2, FUN = mean)
+eu_rpw00_10_avg_qunt = sapply(eu_rpw00_10, MARGIN = 2, FUN = quantile, 0.75)
+
+rpwts00_10 = data.frame(us = as.numeric(us_rpw90[1,-1:-2][,9:18]),
+                   eu.avg = as.numeric(eu_rpw00_10_avg),
+                   eu.qunt = as.numeric(eu_rpw00_10_avg_qunt))
+
+rpwts_tidy00_10 = gather(rpwts00_10, key = 'region', value = 'rpw')
+rpwts_tidy00_10$year = rep(2001:2010, 3)
+
+rpwts_tidy00_10 %>% ggplot(aes(x = year, y = rpw, col = region)) +
+  geom_line() +
+  geom_point(aes(shape = region)) +
+  scale_x_continuous(breaks = seq(2001,2010,2))
+```
+
+
+```{r include = FALSE}
+eu_rpw10_16 = eu_rpw.c[c("DE", "DK", "ES", "FI", "FR", "IT", "UK"),19:24]
+eu_rpw10_16_avg = sapply(eu_rpw10_16, MARGIN = 2, FUN = mean)
+eu_rpw10_16_avg_qunt = sapply(eu_rpw10_16, MARGIN = 2, FUN = quantile, 0.75)
+
+rpwts10_16 = data.frame(us = as.numeric(us_rpw90[1,-1:-2][,19:24]),
+                   eu.avg = as.numeric(eu_rpw10_16_avg),
+                   eu.qunt = as.numeric(eu_rpw10_16_avg_qunt))
+
+rpwts_tidy10_16 = gather(rpwts10_16, key = 'region', value = 'rpw')
+rpwts_tidy10_16$year = rep(2011:2016, 3)
+
+rpwts_tidy10_16 %>% ggplot(aes(x = year, y = rpw, col = region)) +
+  geom_line() +
+  geom_point(aes(shape = region)) +
+  scale_x_continuous(breaks = seq(2011,2016,2))
+```
+
+```{r}
+fss_e <- read.dta("../outputs/data/fss_e.dta")
+fss_e <- merge(fss_e, cw_fips_cty_name, by = "fipscty", all = F)
+fss_e1990 <- fss_e[fss_e$census == 1990, ]
+fss_e2000 <- fss_e[fss_e$census == 2000, ]
+fss_e2010 <- fss_e[fss_e$census == 2010, ]
+```
+
+
+```{r}
+fss_e1990 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = delta_exp_robs)) +
+  geom_point(aes(size = cd_prop_pop),pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_smooth(method = "lm", aes(weight = tot_pop)) +
+scale_y_continuous(name = "Exposure to Robots US 2004-2010",
+                   breaks = seq(0,5,1)) +
+  scale_x_continuous(name = "Exposure to Robots EU 1993-2000", breaks = seq(0,5,1)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+```
+
+```{r}
+fss_e2000 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = delta_exp_robs)) +
+  geom_point() +
+  geom_smooth(method = "lm", aes(weight = cd_prop_pop))
+```
+
+```{r}
+fss_e2010 %>%
+  ggplot(aes(x = eu_delta_exp_robs, y = delta_exp_robs)) +
+  geom_point() +
+  geom_smooth(method = "lm", aes(weight = cd_prop_pop))
+```
+
+

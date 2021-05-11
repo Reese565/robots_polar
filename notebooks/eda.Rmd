@@ -1,0 +1,934 @@
+---
+title: "Industrial Automation and Political Polarization"
+subtitle: "Exploratory Data Analysis"
+author: "Maurice Williams"
+date: "November 16th, 2018"
+abstract: "I visually examine the relationship between political polarization and technology shocks. Using a series of plots, I find tentative evidence of relationship between the change in ideaological positions of congressional representatives and my *exposure to robots* variablable."
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+library(cowplot)
+source("../scripts/functions.R")
+load("eda.RData")
+```
+
+```{r echo = FALSE}
+# CBP Data (w/DDorn estimates)
+cbp90 = cbpdd_build()
+
+cbp90n = national_isic(cbp90)
+
+cbp90c = county_emp(cbp90)
+
+cbp90czind = ind_cz_emp(cbp90)
+cbp90czindp = cz_ind_prop(cbp90)
+cbp90czindp_cty = cz.fips_data(cbp90czindp)
+
+
+# EUKLEMS Data
+euklems = list.files('../data/eu_klems', pattern="*.csv", full.names=TRUE)
+euklems_dfl = lapply(euklems, read.csv, stringsAsFactors = F)
+names(euklems_dfl) = gsub('[^A-Z]','', euklems)
+eu_bool = names(euklems_dfl) != 'US'
+euklems_dfl = euklems_dfl[eu_bool]
+euklems_dfl = lapply(euklems_dfl, euklems_clean, base = '1995')
+
+
+# IFR Data
+us_ifr = read.csv("../data/ifr/NA/NA.csv",
+                  stringsAsFactors = F,
+                  na.strings = '')
+us_ifr = build_ifr(us_ifr)
+us_rpw90 = rob_per_worker(cbp90n, us_ifr)
+
+eu_ifr = list.files('../data/ifr/Europe', pattern='*.csv', full.names=T)
+eu_ifr_dfl = lapply(eu_ifr, read.csv, stringsAsFactors = F, na.string = '')
+eu_ifr = gsub('[^A-Z]','', eu_ifr)
+names(eu_ifr_dfl) = gsub('^.','', eu_ifr)
+eu_ifr_dfl = lapply(eu_ifr_dfl, build_ifr)
+
+eu_rpw95 = list()
+eu_rpw.c = data.frame(matrix(rep(0, 25), nrow = 1))
+
+countries = names(eu_ifr_dfl)
+
+for (country in countries){
+  euklems = euklems_dfl[[country]]
+  ifr = eu_ifr_dfl[[country]]
+  rpw = rob_per_worker(euklems, ifr)
+  eu_rpw95[[country]] = rpw
+  
+  rpw$country = country
+  rpw = rpw %>% select(country, everything())
+  rpw = rpw[,-c(2,3)]
+  colnames(eu_rpw.c) = colnames(rpw)
+  eu_rpw.c = rbind(eu_rpw.c, rpw[1,])
+  
+  if (country == countries[length(countries)]){
+    eu_rpw.c = eu_rpw.c[-1,]
+  }
+}
+
+rownames(eu_rpw.c) = countries
+eu_rpw.c = eu_rpw.c[,-1]
+```
+
+
+##Introduction
+
+I begin to examine the evolution of both political polarization in the United States, and visually explore if any relationship exists between the drift in party ideaology and changes in their districts change in exposure to technology shocks. Specifically, I will use several data plotting methods to compare the ideological scores of members of the House of Representatives from 1993 to 2016 to see if the changes I observe are related to trends in congressional districts increase in the exposure to industrial robots in the local labor market (commuting zones) the district belongs to.
+
+<!-- This short paper proceeds in the following way. First, I introduce the variables I'll be examining, along with a few notes on contruction and sources. Then, I explore the political ideology dataset to confirm the existence of a polarizing trend, and then attempt to compare it variables contructed from the IFR dataset. Finally, I take a higher level approach to relating these variables by controlling for the components of the change in representative ideaology, determined by factors other than my measure for technology shocks, and relate them to the change in my *exposure to robots* primary variable of interest. -->
+
+##Data
+
+For data measuring a legislatures political ideaology, our dependent variable, I use the first dimensiona of the DW-NOMINATE Score, or Nominate Score. This measure assesses the roll call votes of a representative over the course of their political career and places them on a binary ideaological scale from negative 1 to positive one, with movements toward negative one being a sign of a more liberal politician and movements toward positive one being more coservative. The ideaological center would be the center of this axis at zero, with more polarized positions being further away from this measure of political center.
+
+The data on our technology shocks was aquired from the International Federation of Robotics (IFR) and measures the national stock of industrial robots from 1993 to 2016 for the United States. Industry level breakdowns for the United States are not available until 2004. Impacts on labor markets before this period have been iputed by using the data from 2004 to 2010. Each "shock" of industrial robots in a particular industry is weighted by a commuting zones (CZ) share of total employment for that industry and then the sum of these weighted shocks is summed across industries for each commuting zone to create our *exposure to robots* primary variable of interest.
+
+In the portions of this report, I examine the relationship of our technology shocks on the componenet of political polarization that is uncorrelated with a series of economic, political, and demographic controls. Start of period political controls include the Nominate score of the representative originally holding the cogressional seat, the share of votes cast for the winning candidate at the beginning of the period, an indicator for if the candidate ran unopposed, all interacted with an indicator for if the seat was held by a Republican at the beginning of the period. Economic controls include the share of manufacturing employment, the share of routine jobs, and an offshorability index used in other related papers, all measured at the commuting zone level. Demographic controls include the proportion of four racial categories in relation whites, the proportion of 4 age categories, the proportion of females, and the proportion of 5 education categories in relation to those holding no highschool diploma.
+
+I also include two measures of trade exposure to control for the already hypothesized relatioship between political polarization and increased import competition. The goal has been to recontruct the change in *import penetration* used by Autor, Dorn and Hansen
+
+$$\Delta IP_{c}=\sum_{i\in \mathcal{I}}l^{1990}_{ic}\bigg(\frac{M^{f}_{i,\tau_{2}}-M^{f}_{i,\tau_{1}}}{Y_{i,\tau_{1}}-X_{i,\tau_{1}}+M_{i,\tau_{1}}}\bigg)$$
+
+where $M^{f}_{i,\tau_{2}}-M^{f}_{i,\tau_{1}}$ is the change in imports from country $f$ for industry $i$ between time periods $\tau_{1}$ and $\tau_{2}$, the denominator $Y_{i,\tau_{1}}-X_{i,\tau_{1}}+M_{i,\tau_{1}}$ is the initial obsorbtion (US industry shipments plus net exports) at the start of the period $\tau_{1}$, and $l^{1990}_{ic}$ is the share of employment for industry $i$ in CZ $c$.
+
+The data gathered for these variables come from three primary sources. Data on imports and exports were aquired from the UN Comtrade website and were downloaded with their six-digit Harmonized Commodity Codes. These codes were then crosswalked to their Standard Industrial Classification (SIC 1987) equivalents using a file provided on David Dorns public data page. Data for industry shipments were aquired from the NBER-CES Manufacturing Industry Database, which is a joint effort between the  National Bureau of Economic Research (NBER) and the Center for Economic Studies (CES). This data provides the value of shipments for at the four-digit SIC 1987 industrial level. Commuting zone employment shares were gathered from the County Business Patterns (CBP) data page. Missing values and employment flag identifiers were imputed with estimates using another file available on David Dorns public data page.
+
+
+
+##Evolution of the Partisan Ideological Drift
+
+I next take steps to examine the expanding partisan divide that has emerged over the last thirty years. While it is generally agreed that there are multiple causal variables that have contributed to this divide, the specific underlying forces, be they economic shocks or cultural shifts, remain tentative in the prevailing literature. While the contributions of the evolving media culture, surges in legal and illgal immigration, and the downsides to increasing globalization all have their parts to play in this process, the magnitude of their contributions remains uncertain.
+
+I proceed by plotting the spread of ideaological scores between the two major political parties from the mid 1980's to the present, as well as the difference between these parties ideaological centers over the same period. Figure 1 displays both of these plots side by side. The figure on the left displays the minimum, median, and maximum of the distribution of nominate scores for the two parties, and the figure on the right shows the difference between the parties distribution median and means. By the mid 1980's the two were already somewhat polarized with a difference between their centers of approximately 0.65. During the 99th Congress, that came to session in January of1985, the members of the House of Representatives from minority Republican party had an average ideaological score of `r round(gop_beg_mu,4)` with a standard deviation of `r round(gop_beg_sd,4)`. By the 115th Congress, the one now ending in 2018, the party had a average ideaological score of `r round(gop_end_mu,4)` and a standard deviation of `r round(gop_end_sd,4)`. The Democratic Party experience a similar shift away from the political center, `r round(dem_beg_mu,4)` in 1985 to `r round(dem_end_mu,4)` in 2018 shift in the party average with a narrowing standard deviation, `r round(dem_beg_sd,4)` in 1985 to `r round(dem_end_sd,4)`. We also observe that by the early 2000's the two parties no longer have any overlap in their ideaological scores, the minimum of the GOP no longer crosses the maximum score of the Democrats. While these figures show that the prevailing trend has been toward more polarization it does not reveal any meaningful information about why such a process is occuring. We attempt to link these trends with technology shocks next.
+
+\newpage
+```{r echo = FALSE}
+# Change in Nominate Scores 1990-2016
+
+dw_nom <- read.csv("../data/dw_nominate/dw_nom.csv")
+
+dwnom_sum <- na.omit(dw_nom[dw_nom$congress > 98,-6]) %>%
+  group_by(congress, party_code) %>%
+  summarise(mean.nom = mean(nominate_dim1),
+            min.nom = min(nominate_dim1),
+            quant.10 = quantile(nominate_dim1, .10),
+            med.nom = median(nominate_dim1),
+            quant.90 = quantile(nominate_dim1, .90),
+            max.nom = max(nominate_dim1))
+
+dwnom_sum_dem = dwnom_sum[dwnom_sum$party_code == 100,] %>%
+  mutate(dem.mean = mean.nom,
+         dem.min = min.nom,
+         dem.10 = quant.10,
+         dem.med = med.nom,
+         dem.90 = quant.90,
+         dem.max = max.nom) %>%
+  select(congress, dem.mean, dem.10, dem.med, dem.90, dem.min, dem.max)
+
+dwnom_sum_gop = dwnom_sum[dwnom_sum$party_code == 200,] %>%
+  mutate(gop.mean = mean.nom,
+         gop.min = min.nom,
+         gop.10 = quant.10,
+         gop.med = med.nom,
+         gop.90 = quant.90,
+         gop.max = max.nom) %>%
+  select(congress, gop.mean, gop.10, gop.med, gop.90, gop.min, gop.max)
+
+measures <- c("dem.min","dem.med", "dem.max",
+              "gop.min", "gop.med", "gop.max")
+
+dwnom_prty_sum = merge(dwnom_sum_dem, dwnom_sum_gop, by = "congress") %>%
+  select(congress, measures)
+
+dwnom_prty_sum_tidy = gather(dwnom_prty_sum[,-1], key = "party_var")
+dwnom_prty_sum_tidy$year = rep(seq(1984,2016,2), length(measures))
+
+dwnom_prty_sum_tidy$party_var[dwnom_prty_sum_tidy$party_var == "dem.min"] = "Dem Min"
+dwnom_prty_sum_tidy$party_var[dwnom_prty_sum_tidy$party_var == "dem.med"] = "Dem Median"
+dwnom_prty_sum_tidy$party_var[dwnom_prty_sum_tidy$party_var == "dem.max"] = "Dem Max"
+dwnom_prty_sum_tidy$party_var[dwnom_prty_sum_tidy$party_var == "gop.min"] = "GOP Min"
+dwnom_prty_sum_tidy$party_var[dwnom_prty_sum_tidy$party_var == "gop.med"] = "GOP Median"
+dwnom_prty_sum_tidy$party_var[dwnom_prty_sum_tidy$party_var == "gop.max"] = "GOP Max"
+```
+
+```{r echo = F, fig.cap = "Center and Spread of Partisan Drift", fig.asp = 0.45}
+f1 <- dwnom_prty_sum_tidy %>% ggplot(aes(x = year, y = value*100, col = party_var)) +
+  geom_line(aes(linetype = party_var)) +
+  scale_colour_manual(breaks=c("Dem Min","GOP Min","Dem Median",
+                               "GOP Median","Dem Max","GOP Max"),
+                     values=c("steelblue3","steelblue3","steelblue3",
+                              "lightcoral", "lightcoral", "lightcoral")) +
+  scale_linetype_manual(breaks=c("Dem Min","GOP Min","Dem Median",
+                               "GOP Median","Dem Max","GOP Max"),
+                        values = c("dotted", "longdash","dotted",
+                                   "dotted", "longdash", "dotted"))+
+  scale_y_continuous(name = "Nominate Score") +
+  scale_x_continuous(name = "Year", breaks = seq(1984,2016,8)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        plot.title = element_text(size=11, face = "plain")) +
+  labs(title = "Center and Spread of Partisan Drift")
+```
+
+
+
+```{r echo = FALSE}
+# Difference in means/medians of parties
+
+dwnom_prty_mean_diff <- dwnom_sum_gop$gop.mean - dwnom_sum_dem$dem.mean
+dwnom_prty_median_diff <- dwnom_prty_sum$gop.med - dwnom_prty_sum$dem.med
+
+party_diffs <- data.frame(mean.diff = dwnom_prty_mean_diff,
+                          median.diff = dwnom_prty_median_diff,
+                          congress = 99:115)
+
+party_diffs_tidy = gather(party_diffs[,-3], key = "party_diff")
+party_diffs_tidy$year = seq(1984,2016,2)
+
+party_diffs_tidy$party_diff[party_diffs_tidy$party_diff == "mean.diff"] = "Difference in Party Mean"
+party_diffs_tidy$party_diff[party_diffs_tidy$party_diff == "median.diff"] = "Difference in Party Median"
+```
+
+```{r echo = F, fig.cap = "Differences in Party Ideological Centers"}
+f2 <- party_diffs_tidy %>% ggplot(aes(x = year, y = value*100, linetype = party_diff)) +
+  geom_line(col = "darkorange1") +
+  scale_y_continuous(name = "Difference in Party Nominate Score",
+                     breaks = seq(0,100,10),
+                     limits = c(50,100)) +
+  scale_x_continuous(name = "Year", breaks = seq(1984,2016,8)) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        legend.text = element_text(size=10),
+        plot.title = element_text(size=11, face = "plain")) +
+  labs(title = "Differences in Party Ideological Centers")
+```
+
+```{r include = F}
+dem_dw <- dw_nom[dw_nom$party_code == 100,]
+gop_dw <- dw_nom[dw_nom$party_code == 200,]
+
+
+dem_beg_mu <- mean(dem_dw[dem_dw$congress == 99,"nominate_dim1"])
+dem_beg_sd <- sd(dem_dw[dem_dw$congress == 99,"nominate_dim1"])
+
+dem_end_mu <- mean(dem_dw[dem_dw$congress == 115,"nominate_dim1"])
+dem_end_sd <- sd(dem_dw[dem_dw$congress == 115,"nominate_dim1"])
+
+gop_beg_mu <- mean(gop_dw[gop_dw$congress == 99,"nominate_dim1"])
+gop_beg_sd <- sd(gop_dw[gop_dw$congress == 99,"nominate_dim1"])
+
+gop_end_mu <- mean(gop_dw[gop_dw$congress == 115,"nominate_dim1"])
+gop_end_sd <- sd(gop_dw[gop_dw$congress == 115,"nominate_dim1"])
+
+```
+
+```{r echo = F, fig.height = 5, fig.width = 10, fig.cap = "Evolution of Partisan Divide"}
+plot_grid(f1,f2, ncol = 2, align = "h")
+```
+
+```{r echo = F}
+pdf("../outputs/plots/polarization.pdf", width=9, height=5)
+plot_grid(f1,f2, ncol = 2, align = "h")
+dev.off()
+```
+
+\vspace{24pt}
+
+##Ideaological Polarization and the Technology Shocks
+
+<!-- I'm seeking to make inferences about the relatiomship, if any, between the changing composition of legislature ideaology and the stock of industrial robots. To make a meangful comparison, I'm comparing the change in the two parties ideaological centers with robots per worker. That is the ratio of the national stock of industrial robots over total US non-farm employment (measured in the thousands) for the base period in 1990. Figure 2 plots these variables from the early 1990's to the mid 2010's once again. Both variables show an increasing trend, we observe a rising level of partisan polarization coinciding with a rise in robots per thousand workers in the economy. While this approach is somewhat naive  -->
+
+Figure 2 attempts to show how the changing ideaological composition of the House of Representatives may be related to the commuting zones that congressional districts belong to experience changes in their *exposure to robots*. This variable is constructed from the national stock of industrial robots in a given industry and then weighted by the share of employment in that industry in a given commmuting zone. These weighted changes are then summed acorss all industries for each commuting zone. Figure 2 below attempts to tell the story of polarization through the changes in this variable. Each pane corresponds to a period in which congressional districts remain more or less unchanged, those being within a given Census peirod. The top pane corresponds to congressional districts defined during the 1990 Census, and the procedding panes are for the 2000 and 2010 Census periods respectively.
+
+The horizontal axis on each plot is the beginning of period nominate score for the representative holding the seat for that district, and the y-axis is the nominate score for the congressional district for the representative in office by the end of the period. The fill of each point displays the party membership of the representative holding the seat at the beginning of the period, while the color of the ring shows the party affiliation of the member holding the district seat by the end of the period. The setup of this plot is such that the forty-five degree line across each pane determines if a district seat remained in the hands of the incumbant. Shifts above this line are caused by the loss of the incumbant to a more ideaologically conservative representative, and shifts below this line show the same in the more liberal direction. The size of each point coincides the the change in a commuting zones *exposure to robots* that each congressional district belongs to.
+
+With this series of plots we con observe the removal of moderate politicians with more politically polarized ones as measured by their nominate scores. The center of each panes presents those politicians holding more moderate political views. Across the panes, we see the center being slowly abandonded as districts are claimed by those with more extreme views, shown as points either falling or rising out of the center of each graph. The result is that by the 2010's the center of the graph has been completely abandoned.
+
+
+
+
+```{r echo = FALSE}
+nmpd.93_16 <- dwnom_prty_mean_diff[5:16]
+usrpw.93_16 <- as.numeric(us_rpw90[1,-1:-2])[seq(1,24,2)]
+
+
+nrpw.93_16 <- data.frame(pol = nmpd.93_16,
+                         rpw = usrpw.93_16,
+                         years = seq(1993,2016,2))
+
+nrpw.93_16_tidy <- gather(nrpw.93_16[,-3])
+nrpw.93_16_tidy$years = rep(seq(1993,2016,2), 2)
+
+nrpw.93_16_tidy$key[nrpw.93_16_tidy$key == "pol"] = "Polarization"
+nrpw.93_16_tidy$key[nrpw.93_16_tidy$key == "rpw"] = "Robots per Worker"
+```
+
+```{r include = F, fig.height = 4, fig.width = 5, fig.cap = "Party Polarization and Robots Per Worker"}
+f3 <- nrpw.93_16_tidy %>% ggplot(aes(x = years, y = value, col = key)) +
+  geom_line() +
+  facet_wrap(.~key, nrow = 2) +
+  facet_grid(key ~ ., scales = "free_y") +
+  scale_x_continuous(breaks = seq(1993,2016,4)) +
+  ylab("") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(margin = margin(r = 30, unit = "pt"),
+                                   size=10),
+        axis.text = element_text(size=10),
+        axis.title = element_text(size=10),
+        strip.text.y = element_text(size = 8),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+f3
+```
+
+```{r echo = F}
+pdf("../outputs/plots/rpw_on_polarization.pdf", width=8, height=7)
+f3
+dev.off()
+```
+
+
+
+```{r include = FALSE}
+hr_103.107 <- read.csv("../data/dw_nominate/party_changes/hr_103-107.csv")
+
+hr_103.107 %>% ggplot(aes(x = cnom)) +
+  geom_density()
+```
+
+
+```{r include = FALSE}
+hr_108.112 <- read.csv("../data/dw_nominate/party_changes/hr_108-112.csv")
+
+hr_108.112 %>% ggplot(aes(x = cnom)) +
+  geom_density()
+```
+
+
+```{r include = FALSE}
+hr_113.115 <- read.csv("../data/dw_nominate/party_changes/hr_113-115.csv")
+
+hr_113.115 %>% ggplot(aes(x = cnom)) +
+  geom_density()
+```
+
+
+
+
+```{r echo = FALSE}
+fss <- read.dta("../outputs/data/fss.dta")
+fss$end_party[fss$end_party == "GOP"] = "GOP Captured"
+fss$end_party[fss$end_party == "Democrat"] = "Democrat Captured"
+
+# fss90 <- fss[fss$t1==1,]
+# fss00 <- fss[fss$t2==1,]
+# fss10 <- fss[fss$t3==1,]
+
+
+der_controls <- c("delta_exp_robs", "eu_delta_exp_robs", "nominate_beg",
+                   "china_deltaip", "mex_deltaip",
+                   "man_sh", "sh_routine", "sh_off",
+                   "adlt", "miad1","miad2", "sen",
+                   "females",
+                   "black_nh", "nw_hisp",
+                   "wht_hisp","asia_pi", "am_in", "other",
+                   "no_dip","hs_dip","some_col", "assoc", "bach","grad_plus",
+                   "win_prop_int", "unopposed_int", "nominate_beg_int",
+                   "census")
+
+fss$win_prop_int = fss$win_prop*fss$gop_win
+fss$unopposed_int = fss$unopposed*fss$gop_win
+fss$nominate_beg_int = fss$nominate_beg*fss$gop_win
+
+
+fss_der <- fss[,der_controls]
+fss$der_fs = 0
+
+fit_der90 <- lm(delta_exp_robs ~ ., data = fss_der[fss_der$census == 1990,-29])
+fss$der_fs[fss$census == 1990] <- fit_der90$fitted.values
+
+fit_der00 <- lm(delta_exp_robs ~ ., data = fss_der[fss_der$census == 2000,-29])
+fss$der_fs[fss$census == 2000] <- fit_der00$fitted.values
+
+fit_der10 <- lm(delta_exp_robs ~ ., data = fss_der[fss_der$census == 2010,-29])
+fss$der_fs[fss$census == 2010] <- fit_der10$fitted.values
+
+
+fss90 <- fss[fss$census == 1990,]
+fss00 <- fss[fss$census == 2000,]
+fss10 <- fss[fss$census == 2010,]
+
+```
+
+
+
+
+```{r echo = FALSE}
+# Manufacturing Perspective
+
+p90 <- fss90 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = man_sh)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss90$man_sh, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5), guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral", "grey78")) +
+  scale_x_continuous(name = "Nominate Score 1993") +
+  scale_y_continuous(name = "Nominate Score 2000") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1)),
+         fill = F) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p6 <- ggMarginal(p6, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+# p90
+
+p00 <- fss00 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = man_sh)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss00$man_sh, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5), guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "Nominate Score 2001") +
+  scale_y_continuous(name = "Nominate Score 2010") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1)),
+         fill = F) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p6 <- ggMarginal(p6, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+# p00
+
+
+p10 <- fss10 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = man_sh)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss10$man_sh, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5)) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral"), guide = FALSE) +
+  scale_x_continuous(name = "Nominate Score 2011") +
+  scale_y_continuous(name = "Nominate Score 2016") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p7 <- ggMarginal(p7, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+# p10
+```
+
+```{r echo = FALSE}
+# Exposure to Robots Perspective
+
+pp90 <- fss90 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = delta_exp_robs)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss90$delta_exp_robs, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5), guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral", "grey78")) +
+  scale_x_continuous(name = "Nominate Score 1993") +
+  scale_y_continuous(name = "Nominate Score 2000") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1)),
+         fill = F) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p6 <- ggMarginal(p6, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+# p90
+
+pp00 <- fss00 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = delta_exp_robs)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss00$delta_exp_robs, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5), guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "Nominate Score 2001") +
+  scale_y_continuous(name = "Nominate Score 2010") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1)),
+         fill = F) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p6 <- ggMarginal(p6, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+# p00
+
+
+pp10 <- fss10 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = delta_exp_robs)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss10$delta_exp_robs, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5)) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral"), guide = FALSE) +
+  scale_x_continuous(name = "Nominate Score 2011") +
+  scale_y_continuous(name = "Nominate Score 2016") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p7 <- ggMarginal(p7, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+# p10
+```
+
+
+```{r include = F}
+# p90m <- p90 + guides(color = F, fill = F)
+# p00m <- p00+ guides(color = F, fill = F)
+# pp90m <- pp90 + guides(color = F, fill = F)
+# pp00m <- pp00+ guides(color = F, fill = F)
+# p10m <- p10 + guides(color = F, fill = F)
+# pp10m <- pp10 #+ guides(colour = T, fill = F)
+# 
+# pdf("../outputs/plots/polarization_evolution_scatter.pdf", width=12, height=12)
+# plot_grid(p90m,pp90m,p00m,pp00m,p10m,pp10m,ncol = 2,
+#           labels = c("Manuf", "Exp Robs"),
+#           vjust = 1.75)
+# dev.off()
+# plot_grid(p90m,pp90m,p00m,pp00m,p10m,pp10m,ncol = 2, labels = c("Manuf", "Exp Robs"))
+
+pp90m <- pp90 + guides(color = F, fill = F)
+pp00m <- pp00+ guides(color = F, fill = F)
+
+pdf("../outputs/plots/polarization_evolution_scatter.pdf", width=8, height=12)
+plot_grid(pp90m,pp00m,pp10,ncol = 1)
+dev.off()
+```
+
+```{r fig.cap = "Ideaological Polarization & Exposure to Robots", fig.height=12, fig.width=8, echo = F}
+plot_grid(pp90m,pp00m,pp10,ncol = 1)
+```
+
+\newpage
+
+Do we see a relationship between these movements away from the center and the size of the dots? The size of each point corresponds to the 75th, 90th, 95th, and 99th quantiles in the distribution of the change in *exposure to robots* for a given period. While it's clear that many of the larger sized points are being lifted out and away from the ideaological center, both when the district switch party seats and when the seat is replaced with a more partisan politician, there are also many seats with significant changes in their exposure to technology shocks that remain unchanged.
+
+Further analysis is needed to asertain the relatiomship between these technology shocks and polarization. I intend to explore further visual representations of this relationship by examining the component of ideaological position of legislators that is orthoganal to my economic, political, and demographic controls.
+
+```{r include = FALSE}
+p8 <- fss00 %>%
+  ggplot(aes(x = abs_nominate_beg, y = abs_nominate_end,
+             size = delta_exp_robs)) +
+  geom_point(alpha = 0.35, aes(col = beg_party)) +
+  scale_size_area(breaks = quantile(fss10$delta_exp_robs, seq(0,1,0.25)),
+                  guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "Absolute Nominate Score 2001") +
+  scale_y_continuous(name = "Absolute Nominate Score 2010") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p8 <- ggMarginal(p8, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+p8
+```
+
+
+```{r include = FALSE}
+
+p9 <- fss10 %>%
+  ggplot(aes(x = abs_nominate_beg, y = abs_nominate_end,
+             size = delta_exp_robs)) +
+  geom_point(alpha = 0.35, aes(col = beg_party)) +
+  scale_size_area(breaks = quantile(fss10$delta_exp_robs, seq(0,1,0.25)),
+                  guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "Absolute Nominate Score 2011") +
+  scale_y_continuous(name = "Absolute Nominate Score 2016") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+# p9 <- ggMarginal(p9, type = "density",
+#                  color = "grey40",
+#                  fill = "grey80")
+p9
+```
+
+
+```{r include = FALSE}
+p2 <- fss00 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_nom)) +
+  geom_point(alpha = 0.35, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "US Exposure to Robots, 2004-2010") +
+  scale_y_continuous(name = "Change in Nominate Scores, 2002-2010") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = c(0.8,0.80),
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4')) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+# p2 <- ggMarginal(p2, type = "density",
+#                  color = "lavenderblush4",
+#                  fill = "lavenderblush3")
+
+p2
+```
+
+```{r include = F}
+p3 <- fss00 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_abs_nom)) +
+  geom_point(alpha = 0.35,aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "US Exposure to Robots, 2004-2010") +
+  scale_y_continuous(name = "Change in Absolute Nominate Scores, 2002-2010") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = c(0.8,0.80),
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4')) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+# p3 <- ggMarginal(p3, type = "density",
+#                  color = "lavenderblush4",
+#                  fill = "lavenderblush3")
+
+p3
+```
+
+```{r include = F}
+
+p4 <- fss10 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_nom)) +
+  geom_point(alpha = 0.35, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "US Exposure to Robots, 2011-2016") +
+  scale_y_continuous(name = "Change in Nominate Scores, 2012-2016") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = c(0.8,0.80),
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4')) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+# p4 <- ggMarginal(p4, type = "density",
+#                  color = "lavenderblush4",
+#                  fill = "lavenderblush3")
+p4
+```
+
+```{r include = F}
+
+p5 <- fss10 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_abs_nom)) +
+  geom_point(alpha = 0.35, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "US Exposure to Robots, 2011-2016") +
+  scale_y_continuous(name = "Change in Absolute Nominate Scores, 2012-2016") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = c(0.8,0.80),
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4')) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+# p5 <- ggMarginal(p5, type = "density",
+#                  color = "lavenderblush4",
+#                  fill = "lavenderblush3")
+p5
+```
+
+
+
+
+
+
+```{r echo = F}
+
+fsdf <- read.dta("../outputs/data/fssc3.dta")
+
+fsdf$win_prop_int <- fsdf$win_prop*fsdf$gop_win
+fsdf$unopposed_int <- fsdf$unopposed*fsdf$gop_win
+fsdf$nominate_beg_int <- fsdf$nominate_beg*fsdf$gop_win
+
+dnom_controls <- c("delta_nom", "nominate_beg",
+              "china_deltaip", "mex_deltaip",
+              "man_sh", "sh_routine", "sh_off",
+              "adlt", "miad1","miad2", "sen",
+              "females",
+              "black_nh", "nw_hisp",
+              "wht_hisp","asia_pi", "am_in", "other",
+              "no_dip","hs_dip","some_col", "assoc", "bach","grad_plus",
+              "win_prop_int", "unopposed_int", "nominate_beg_int",
+              "census")
+
+danom_controls <- c("delta_abs_nom", "nominate_beg",
+                   "china_deltaip", "mex_deltaip",
+                   "man_sh", "sh_routine", "sh_off",
+                   "adlt", "miad1","miad2", "sen",
+                   "females",
+                   "black_nh", "nw_hisp",
+                   "wht_hisp","asia_pi", "am_in", "other",
+                   "no_dip","hs_dip","some_col", "assoc", "bach","grad_plus",
+                   "win_prop_int", "unopposed_int", "nominate_beg_int",
+                   "census")
+
+der_controls <- c("delta_exp_robs", "eu_delta_exp_robs", "nominate_beg",
+                   "china_deltaip", "mex_deltaip",
+                   "man_sh", "sh_routine", "sh_off",
+                   "adlt", "miad1","miad2", "sen",
+                   "females",
+                   "black_nh", "nw_hisp",
+                   "wht_hisp","asia_pi", "am_in", "other",
+                   "no_dip","hs_dip","some_col", "assoc", "bach","grad_plus",
+                   "win_prop_int", "unopposed_int", "nominate_beg_int",
+                   "census")
+
+fsdf_dnom <- fsdf[,dnom_controls]
+fsdf_danom <- fsdf[,danom_controls]
+fsdf_der <- fsdf[,der_controls]
+
+fsdf$dnom_orthoganal = 0
+fsdf$danom_orthoganal = 0
+fsdf$der_fs = 0
+
+fit_dnom90 <- lm(delta_nom ~ ., data = fsdf_dnom[fsdf_dnom$census == 1990,-28])
+fit_danom90 <- lm(delta_abs_nom ~ ., data = fsdf_danom[fsdf_danom$census == 1990,-28])
+fit_der90 <- lm(delta_exp_robs ~ ., data = fsdf_der[fsdf_der$census == 1990,-29])
+
+fsdf$dnom_orthoganal[fsdf$census == 1990] <- fit_dnom90$residuals
+fsdf$danom_orthoganal[fsdf$census == 1990] <- fit_danom90$residuals
+fsdf$der_fs[fsdf$census == 1990] <- fit_der90$residuals
+
+fit_dnom00 <- lm(delta_nom ~ ., data = fsdf_dnom[fsdf_dnom$census == 2000,-28])
+fit_danom00 <- lm(delta_abs_nom ~ ., data = fsdf_danom[fsdf_danom$census == 2000,-28])
+fit_der00 <- lm(delta_exp_robs ~ ., data = fsdf_der[fsdf_der$census == 2000,-29])
+
+fsdf$dnom_orthoganal[fsdf$census == 2000] <- fit_dnom00$residuals
+fsdf$danom_orthoganal[fsdf$census == 2000] <- fit_danom00$residuals
+fsdf$der_fs[fsdf$census == 2000] <- fit_der00$residuals
+
+fit_dnom10 <- lm(delta_nom ~ ., data = fsdf_dnom[fsdf_dnom$census == 2010,-28])
+fit_danom10 <- lm(delta_abs_nom ~ ., data = fsdf_danom[fsdf_danom$census == 2010,-28])
+fit_der10 <- lm(delta_exp_robs ~ ., data = fsdf_der[fsdf_der$census == 2010,-29])
+
+fsdf$dnom_orthoganal[fsdf$census == 2010] <- fit_dnom10$residuals
+fsdf$danom_orthoganal[fsdf$census == 2010] <- fit_danom10$residuals
+fsdf$der_fs[fsdf$census == 2010] <- fit_der10$residuals
+
+
+fsdf90 <- fsdf[fsdf$census == 1990,]
+fsdf00 <- fsdf[fsdf$census == 2000,]
+fsdf10 <- fsdf[fsdf$census == 2010,]
+```
+
+
+
+
+
+
+
+
+
+```{r include = F}
+qq90 <- fsdf90 %>% ggplot(aes(sample = danom_orthoganal)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density90 <- fsdf90 %>% ggplot(aes(x = danom_orthoganal)) +
+  geom_density()
+
+plot_grid(density90, qq90)
+```
+
+```{r include = F}
+qq00 <- fsdf00 %>% ggplot(aes(sample = danom_orthoganal)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density00 <- fsdf00 %>% ggplot(aes(x = danom_orthoganal)) +
+  geom_density()
+
+plot_grid(density00, qq00)
+```
+
+
+```{r include = F}
+qq10 <- fsdf10 %>% ggplot(aes(sample = danom_orthoganal)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density10 <- fsdf10 %>% ggplot(aes(x = danom_orthoganal)) +
+  geom_density()
+
+plot_grid(density10, qq10)
+```
+
+
+
+```{r include = F}
+qq90 <- fsdf90 %>% ggplot(aes(sample = dnom_orthoganal)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density90 <- fsdf90 %>% ggplot(aes(x = dnom_orthoganal)) +
+  geom_density()
+
+plot_grid(density90, qq90)
+```
+
+
+```{r include = F}
+qq00 <- fsdf00 %>% ggplot(aes(sample = dnom_orthoganal)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density00 <- fsdf00 %>% ggplot(aes(x = dnom_orthoganal)) +
+  geom_density()
+
+plot_grid(density00, qq00)
+```
+
+```{r include = F}
+qq10 <- fsdf10 %>% ggplot(aes(sample = dnom_orthoganal)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density10 <- fsdf10 %>% ggplot(aes(x = dnom_orthoganal)) +
+  geom_density()
+
+plot_grid(density10, qq10)
+```
+
+
+
+```{r include = F}
+fsdf90 %>%
+  ggplot(aes(x = danom_orthoganal, y = delta_abs_nom)) +
+  geom_point(col = "cornflowerblue")
+```
+
+
+```{r include = F}
+fsdf90 %>%
+  ggplot(aes(x = dnom_orthoganal, y = delta_nom)) +
+  geom_point(col = "cornflowerblue")
+```
+
+```{r include = F}
+fsdf00 %>%
+  ggplot(aes(x = delta_exp_robs, y = dnom_orthoganal)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+
+```{r include = F}
+fsdf10 %>%
+  ggplot(aes(x = delta_exp_robs, y = dnom_orthoganal)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+```{r include = F}
+fsdf00 %>%
+  ggplot(aes(x = delta_exp_robs, y = danom_orthoganal)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+```{r include = F}
+fsdf10 %>%
+  ggplot(aes(x = delta_exp_robs, y = danom_orthoganal)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+
+```{r echo = F}
+save.image("eda.RData")
+```
+
+
+
+

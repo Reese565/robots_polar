@@ -1,0 +1,1054 @@
+---
+title: "Industrial Automation and Political Polarization"
+subtitle: "Additional Exploratory Data Analysis"
+author: "Maurice Williams"
+date: "November 23rd, 2018"
+abstract: ""
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(ggExtra)
+library(cowplot)
+library(corrplot)
+library(AER)
+source("../scripts/functions.R")
+load("eda2.RData")
+
+```
+
+
+```{r echo = F}
+fss <- read.dta("../outputs/data/fss.dta")
+
+fss$win_prop_int <- fss$win_prop*fss$gop_win_beg
+fss$unopposed_int <- fss$unopposed_beg*fss$gop_win_beg
+fss$nominate_beg_int <- fss$nominate_beg*fss$gop_win_beg
+fss$abs_nominate_beg_int <- fss$abs_nominate_beg*fss$gop_win_beg
+fss$bach_plus <- fss$bach + fss$grad_plus
+
+numeric_columns <- c("delta_nom","delta_abs_nom","nominate_beg",
+                      "nominate_end", "abs_nominate_beg",
+                      "delta_exp_robs","eu_delta_exp_robs",
+                      "china_deltaip", "mex_deltaip",
+                      "man_sh", "sh_routine", "sh_off",
+                      "juv","yngad", "adlt", "miad1","miad2", "sen",
+                      "males","females",
+                      "white_nh","black_nh", "nw_hisp","wht_hisp",
+                      "asia_pi", "am_in", "other",
+                      "no_dip","hs_dip","some_col", "assoc", "bach","grad_plus",
+                      "win_prop")
+
+dnom_controls <- c("delta_nom",
+              "china_deltaip", "mex_deltaip",
+              "sh_routine", "sh_off",
+              "adlt", "miad1","miad2", "sen",
+              "females",
+              "black_nh", "nw_hisp",
+              "wht_hisp","asia_pi", "am_in", "other",
+              "bach_plus",
+              "win_prop_int", "unopposed_int", "nominate_beg_int",
+              "census")
+
+danom_controls <- c("delta_abs_nom",
+                   "china_deltaip", "mex_deltaip",
+                   "man_sh", "sh_routine", "sh_off",
+                   "adlt", "miad1","miad2", "sen",
+                   "females",
+                   "black_nh", "nw_hisp",
+                   "wht_hisp","asia_pi", "am_in", "other",
+                   "bach_plus",
+                   "win_prop", "unopposed", "abs_nominate_beg", "gop_win",
+                   "census")
+
+der_controls <- c("delta_exp_robs", "eu_delta_exp_robs",
+                   "china_deltaip",
+                   "man_sh", "sh_routine", "sh_off",
+                   "adlt", "miad1","miad2", "sen",
+                   "females",
+                   "black_nh", "nw_hisp", "asia_pi", "am_in", "other",
+                   "bach_plus",
+                   "win_prop_int", "unopposed_int", "nominate_beg_int",
+                  "gop_win_beg", "unopposed_beg", 
+                  "gop_delta_sh", "dem_delta_sh", "win_prty_delta_sh",
+                  "delta_win_margin",
+                   "census")
+
+der_controls <- c("delta_exp_robs", "eu_delta_exp_robs",
+                   "china_deltaip",
+                   "man_sh", "sh_routine", "sh_off",
+                   "adlt", "miad1","miad2", "sen",
+                   "females",
+                   "black_nh", "nw_hisp", "asia_pi", "am_in", "other",
+                   "bach_plus",
+                   "win_prop_int", "unopposed_int", "nominate_beg_int",
+                  "gop_win_beg", "unopposed_beg", 
+                  "gop_delta_sh", "dem_delta_sh", "win_prty_delta_sh",
+                  "delta_win_margin",
+                   "census")
+
+
+
+fss_dnom <- fss[,dnom_controls]
+fss_danom <- fss[,danom_controls]
+fss_der <- fss[,der_controls]
+fss_dera <- fss[,dera_controls]
+
+
+fss$dnom_orthoganal = 0
+fss$dnom_fitted = 0
+fss$danom_orthoganal = 0
+fss$danom_fitted = 0
+fss$der_fs = 0
+fss$der_fs_res = 0
+fss$dera_fs = 0
+fss$dera_fs_res = 0
+
+fit_dnom90 <- lm(delta_nom ~ ., data = fss_dnom[fss_dnom$census == 1990,-21])
+fit_danom90 <- lm(delta_abs_nom ~ ., data = fss_danom[fss_danom$census == 1990,-23])
+fit_der90 <- lm(delta_exp_robs ~ ., data = fss_der[fss_der$census == 1990,-23])
+fit_dera90 <- lm(delta_exp_robs ~ ., data = fss_dera[fss_dera$census == 1990,-24])
+
+fss$dnom_orthoganal[fss$census == 1990] <- fit_dnom90$residuals
+fss$dnom_fitted[fss$census == 1990] <- fit_dnom90$fitted.values
+fss$danom_orthoganal[fss$census == 1990] <- fit_danom90$residuals
+fss$danom_fitted[fss$census == 1990] <- fit_danom90$fitted.values
+fss$der_fs[fss$census == 1990] <- fit_der90$fitted.values
+fss$der_fs_res[fss$census == 1990] <- fit_der90$residuals
+fss$dera_fs[fss$census == 1990] <- fit_dera90$fitted.values
+fss$dera_fs_res[fss$census == 1990] <- fit_dera90$residuals
+
+
+fit_dnom00 <- lm(delta_nom ~ ., data = fss_dnom[fss_dnom$census == 2000,-21])
+fit_danom00 <- lm(delta_abs_nom ~ ., data = fss_danom[fss_danom$census == 2000,-23])
+fit_der00 <- lm(delta_exp_robs ~ ., data = fss_der[fss_der$census == 2000,-23])
+fit_dera00 <- lm(delta_exp_robs ~ ., data = fss_dera[fss_dera$census == 2000,-24])
+
+
+fss$dnom_orthoganal[fss$census == 2000] <- fit_dnom00$residuals
+fss$dnom_fitted[fss$census == 2000] <- fit_dnom00$fitted.values
+fss$danom_orthoganal[fss$census == 2000] <- fit_danom00$residuals
+fss$danom_fitted[fss$census == 2000] <- fit_danom00$fitted.values
+fss$der_fs[fss$census == 2000] <- fit_der00$fitted.values
+fss$der_fs_res[fss$census == 2000] <- fit_der00$residuals
+fss$dera_fs[fss$census == 2000] <- fit_dera00$fitted.values
+fss$dera_fs_res[fss$census == 2000] <- fit_dera00$residuals
+
+
+fit_dnom10 <- lm(delta_nom ~ ., data = fss_dnom[fss_dnom$census == 2010,-21])
+fit_danom10 <- lm(delta_abs_nom ~ ., data = fss_danom[fss_danom$census == 2010,-23])
+fit_der10 <- lm(delta_exp_robs ~ ., data = fss_der[fss_der$census == 2010,-23])
+fit_dera10 <- lm(delta_exp_robs ~ ., data = fss_dera[fss_dera$census == 2010,-24])
+
+
+fss$dnom_orthoganal[fss$census == 2010] <- fit_dnom10$residuals
+fss$dnom_fitted[fss$census == 2010] <- fit_dnom10$fitted.values
+fss$danom_orthoganal[fss$census == 2010] <- fit_danom10$residuals
+fss$danom_fitted[fss$census == 2010] <- fit_danom10$fitted.values
+fss$der_fs[fss$census == 2010] <- fit_der10$fitted.values
+fss$der_fs_res[fss$census == 2010] <- fit_der10$residuals
+fss$dera_fs[fss$census == 2010] <- fit_dera10$fitted.values
+fss$dera_fs_res[fss$census == 2010] <- fit_dera10$residuals
+
+
+fss90 <- fss[fss$census == 1990,]
+fss00 <- fss[fss$census == 2000,]
+fss10 <- fss[fss$census == 2010,]
+```
+
+
+What follows is a brief look at my attempts to visualize the relationship between exposure to robots and political polarization. This is followed by a look at some residual plots from one of the set of regression estimates I intend to include in my final analysis. I finish by laying out my next steps for submitting a rough draft of the primary analysis by Tuesday, November 27th.
+
+###Changes in Absolute Nominate Scores and Exogenous Exposure to Robots
+
+As you noted from my last memo, I wanted to figure out how to use the orthogonal component of my exposure to robots variable to visualize the relationship between between it and the change in political ideology. Using this original component, which I understand to be the residual, in this way for analysis is a but knew to me, especially when trying to incorporate an instrument. I’ve been attempting to work through the details, but haven’t reached clarity just yet.
+
+As a substitute, I’ve produced a simple scatter plot of the first stage exogenous exposure to robots variable against the change in absolute nominate scores, with an included regression line weighted by the county proportion of each congressional district. The plot shows a slight positive relationship between my exogenous exposure to robots (the result of my first stage regression) and the change in absolute nominate scores, but it’s not a clear relationship. I’d really like to find a better way to visualize this relationship and reduce some of the noise apprent in this plot.
+
+\vspace{18pt}
+
+
+```{r echo = FALSE}
+
+ep90 <- fss90 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = der_fs)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss90$der_fs, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5), guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral", "grey78")) +
+  scale_x_continuous(name = "Nominate Score 1993") +
+  scale_y_continuous(name = "Nominate Score 2000") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1)),
+         fill = F) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+
+
+ep00 <- fss00 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = der_fs)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss00$der_fs, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5), guide = FALSE) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(name = "Nominate Score 2001") +
+  scale_y_continuous(name = "Nominate Score 2010") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1)),
+         fill = F) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+
+
+
+ep10 <- fss10 %>%
+  ggplot(aes(x = nominate_beg, y = nominate_end, size = der_fs)) +
+  geom_point(shape = 21, alpha = 0.35, aes(fill = beg_party,
+                                           col = end_party)) +
+  scale_radius(breaks = quantile(fss10$der_fs, c(0.75,0.9,0.95,0.99)),
+                  range = c(0.25,5)) +
+  scale_fill_manual(values=c("steelblue3", "lightcoral")) +
+  scale_color_manual(values=c("steelblue3", "lightcoral"), guide = FALSE) +
+  scale_x_continuous(name = "Nominate Score 2011") +
+  scale_y_continuous(name = "Nominate Score 2016") +
+  guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        panel.background = element_rect(fill = 'white'),
+        panel.grid.major.x = element_line(color='#E6E4E4'),
+        panel.grid.major.y = element_line(color='#E6E4E4'))
+```
+
+
+```{r include = F}
+ep90m <- ep90 + guides(color = F, fill = F)
+ep00m <- ep00+ guides(color = F, fill = F)
+
+pdf("../outputs/plots/polarization_evolution_scatter_exogenous.pdf", width=8, height=12)
+plot_grid(ep90m,ep00m,ep10,ncol = 1)
+dev.off()
+```
+
+```{r echo = F, fig.height = 4, fig.width = 6, fig.cap = ""}
+naive_scatter <- fss %>%
+  ggplot(aes(x = der_fs, y = delta_abs_nom)) +
+  geom_point(alpha = 0.5, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop)) +
+    scale_x_continuous(name = "Exogenous Exposure to Robots") +
+  scale_y_continuous(name = "Change in Absolute Nominate Score") +
+  theme(legend.position = "bottom",
+        axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10),
+        legend.title = element_blank())
+
+naive_scatter
+```
+
+
+```{r fig.cap = "Ideaological Polarization & Exposure to Robots", fig.height=12, fig.width=8, include = F}
+plot_grid(ep90m,ep00m,ep10,ncol = 1)
+```
+
+
+
+
+
+```{r include = F}
+fss$st_resids <- (fss$resids_0 - mean(fss$resids_0))/sd(fss$resids_0)
+
+qq <- fss %>% ggplot(aes(sample = st_resids)) +
+  geom_qq() +
+  geom_qq_line(col = 'red')
+
+density1 <- fss %>% ggplot(aes(x = st_resids)) +
+  geom_density() +
+  scale_x_continuous(name = "Standardized Residuals")
+
+pdf("../outputs/plots/residual_plots1.pdf", width=10, height=4)
+plot_grid(density1, qq)
+dev.off()
+```
+
+\newpage
+
+###Residual Analysis
+
+I’ve begun the process of examining my model with a residual analysis of my primary regression. The model that produced these residuals uses two stage least squares estimates against the stacked differences of the three time periods I’m examining. That is, I used 2SLS on the entire dataset as a cross-sectional analysis, even though each cell is produced using differences from different time periods. Since these differences are taken within the time periods that congressional districts remain geographically the same the assignment of the changes in nominate scores will remain valid. I was motivated by the fact that nominate scores only change when an incumbent is removed from office to try and find a way to supply more data for the estimators. My intuition was to clustered standard errors three ways: by commuting zone, congressional district, and census year. These estimates include all economic, political, and demographic controls, as well as dummy variables for the census period.
+
+The pair of plots showing the distribution of the residuals (standardized) and their QQ plot show the distribution to be somewhat approximately normal, except at the tails where we have more extreme outliers, positive more than negative, than expected for a normal distribution. This seems to indicate some omitted variable bias in the model, which I expect to some degree.
+
+
+
+```{r echo = F, fig.height=3, fig.width=8.5, fig.cap="Residual Distribution"}
+plot_grid(density1, qq)
+```
+
+
+
+```{r include = F}
+res_dan_plt <- fss %>%
+  ggplot(aes(x = yhat_0, y = st_resids)) +
+  geom_point(alpha = 0.4, col = "cornflowerblue") +
+  scale_x_continuous(name = "Predicted Change in Absolute Nominate Scores") +
+  scale_y_continuous(name = "Standardized Residuals") +
+  theme(axis.title.x=element_text(size=10),
+        axis.title.y=element_text(size=10))
+
+pred_res_plt <- fss %>%
+  ggplot(aes(x = yhat_0, y = delta_abs_nom)) +
+  geom_point(alpha = 0.4,col = "cornflowerblue") +
+  scale_x_continuous(name = "Predicted Change in Absolute Nominate Scores") +
+  scale_y_continuous(name = "Observed Change in Absolute Nominate Scores") +
+  theme(axis.title.x=element_text(size=9),
+        axis.title.y=element_text(size=9))
+
+pdf("../outputs/plots/residual_plots2.pdf", width=10, height=4)
+plot_grid(res_dan_plt, pred_res_plt)
+dev.off()
+```
+
+\newpage
+
+The next set of plots are simple scatters of the fitted change in nominate scores against the residuals (left), as well as the predicted versus observed plot (right). The residual plot shows the model hasn't quite achieved the desired level of "as if" randomization. As the predicted value increases the residuals drift more positive suggesting that higher changes in my nominate predicted change in nominate scores are under predicting more than ideal, which can be confirmed from looking at the residual distribution in the previous plots above. Additionally, there is a conspicuous squeeze in the range of the residuals between 0 and 0.1 of the predicted domain. This non-randomness can also be observed in the left plot where the plot looks faily similar but with more verticle sheer.
+
+Some of the apparent non-random pattern may be due to the fact that each point is a county-congressional district cell weighted by the county share of the congressional district population. My hunch is that this might produce estimates that are rather close to one another, but deviate in a semi-predictible way. I could use some consulting on if these issues are worth attmpting to address and perhaps some strategies to do so if appropriate.
+
+```{r echo = F, fig.height=3, fig.width=8.5, fig.cap="Residual Scatter Plots"}
+plot_grid(res_dan_plt, pred_res_plt)
+```
+
+###Next Steps
+
+This weekend I plan on running additional regressions in OLS and 2SLS for the pooled dataset as above as well as seperate ones for the three distinct census periods; 1990, 2000, and 2010. I plan to increment the addition on my controls and observe changes in the sign and magnitude of the estimated coefficients, as well as levels of significance, and provide interpretations.
+
+
+
+
+
+```{r include = F}
+fss90 %>%
+  ggplot(aes(x = dera_fs, y = danom_fitted)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+
+```{r include = F}
+fss00 %>%
+  ggplot(aes(x = der_fs_res, y = delta_nom)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+```{r include = F}
+fss00 %>%
+  ggplot(aes(x = dera_fs_res, y = delta_abs_nom)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+
+```{r include = F}
+fss10 %>%
+  ggplot(aes(x = der_fs, y = delta_nom)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+```{r include = F}
+fss10 %>%
+  ggplot(aes(x = dera_fs, y = delta_abs_nom)) +
+  geom_point(alpha = 0.65, aes(col = beg_party)) +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+    guides(colour = guide_legend(override.aes = list(alpha = 1))) +
+  geom_smooth(method = "lm", col = "gray60", aes(weight = cd_prop_pop))
+```
+
+```{r }
+M <- cor(fss[,numeric_columns])
+
+pdf("../outputs/plots/corr_mat.pdf", width=10, height=10)
+corrplot(M, method = "circle")
+dev.off()
+```
+
+
+
+
+
+
+```{r}
+pres_00_08 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_gop_vs)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm")
+
+```
+
+```{r}
+pres_00_08 %>%
+  ggplot(aes(x = china_deltaip, y = delta_gop_vs)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm")
+
+```
+
+```{r}
+pres_00_16 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_gop_vs)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm")
+
+```
+
+
+```{r}
+pres_08_16 %>%
+  ggplot(aes(x = delta_exp_robs, y = delta_gop_vs)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm")
+
+```
+
+```{r}
+pres_08_16 %>%
+  ggplot(aes(x = china_deltaip, y = delta_gop_vs)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm")
+
+```
+
+
+```{r}
+fss %>%
+  ggplot(aes(x = delta_abs_nom*100)) +
+  geom_density()
+```
+
+
+```{r}
+fss %>%
+  ggplot(aes(x = china_deltaip, y = delta_abs_nom*100)) +
+  geom_point(alpha=0.5) +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+fss %>%
+  ggplot(aes(x = delta_exp_robs, y = china_deltaip)) +
+  geom_point(alpha=0.5) +
+  geom_smooth(method = "lm")
+```
+
+
+```{r}
+fss %>%
+  ggplot(aes(x = delta_exp_robs, y = china_deltaip)) +
+  geom_point(alpha=0.5) +
+  geom_smooth(method = "lm")
+```
+
+
+```{r}
+delta_rpw(emp_df = cbp00, ifr_df = us_ifr, begin = "2004", end = "2016")
+```
+
+
+
+```{r}
+us_ifr <- read.csv("../data/ifr/NA/NA.csv",
+                  stringsAsFactors = F,
+                  na.strings = '')
+us_ifr <- build_ifr(us_ifr)
+us_rpw90 <- rob_per_worker(cbp90n, us_ifr)
+us_rpw00 <- rob_per_worker(cbp00n, us_ifr)
+```
+
+
+
+```{r}
+china_dip_04_2016 <- delta_impPen(china_trade,
+                         begin = '2004',
+                         end = '2016')
+
+
+us_rpw_2004 <- us_rpw00[, c("isic", "yr.2004")]
+us_rpw_2016 <- us_rpw00[, c("isic", "yr.2016")]
+
+us_rpw_04_16 <- merge(us_rpw_2004, us_rpw_2016, by = "isic")
+us_drpw_04_16 <- us_rpw_04_16 %>%
+  mutate(us_delta_rpw = yr.2016 - yr.2004) %>%
+  select(isic, us_delta_rpw)
+
+robs_trade.04_16 <- merge(us_drpw_04_16, china_dip_04_2016, by = "isic")
+robs_trade.04_16 <- merge(robs_trade.04_16, cbp00n, by = "isic")
+robs_trade.04_16$ind_prop <- robs_trade.04_16$emp/sum(robs_trade.04_16$emp)
+```
+
+
+```{r}
+robs_trade.04_16 %>%
+  ggplot(aes(x = delta_ip, us_delta_rpw)) +
+  geom_point(aes(size = ind_prop), pch = 21,
+             fill = "lightblue1",
+             col = "lightskyblue4") +
+    geom_text(aes(label = isic),
+            size = 3, col = "indianred2") +
+  geom_abline() +
+  scale_radius(range = c(1, 10), trans = "identity",
+  guide = "legend") +
+  scale_x_log10(limits = c(0.001,1000),
+                name = "Growth in Chinese Imports") +
+  scale_y_log10(limits = c(0.001,1000),
+                name = "Growth in Robots Per Thousand Workers")
+
+```
+
+```{r}
+china_dip_04_2010 <- delta_impPen(china_trade,
+                         begin = '2004',
+                         end = '2010')
+
+
+us_rpw_2004 <- us_rpw00[, c("isic", "yr.2004")]
+us_rpw_2010 <- us_rpw00[, c("isic", "yr.2010")]
+
+us_rpw_04_10 <- merge(us_rpw_2004, us_rpw_2010, by = "isic")
+us_drpw_04_10 <- us_rpw_04_10 %>%
+  mutate(us_delta_rpw = yr.2010 - yr.2004) %>%
+  select(isic, us_delta_rpw)
+
+robs_trade.04_10 <- merge(us_drpw_04_10, china_dip_04_2010, by = "isic")
+robs_trade.04_10 <- merge(robs_trade.04_10, cbp00n, by = "isic")
+robs_trade.04_10$ind_prop <- robs_trade.04_10$emp/sum(robs_trade.04_10$emp)
+```
+
+
+```{r}
+robs_trade.04_10 %>%
+  ggplot(aes(x = delta_ip, us_delta_rpw)) +
+  geom_point(aes(size = ind_prop), pch = 21,
+             fill = "lightblue1",
+             col = "lightskyblue4") +
+    geom_text(aes(label = isic),
+            size = 3, col = "indianred2") +
+  geom_abline() +
+  scale_radius(range = c(1, 10), trans = "identity",
+  guide = "legend") +
+  scale_x_log10(limits = c(0.001,1000),
+                name = "Growth in Chinese Imports") +
+  scale_y_log10(limits = c(0.001,1000),
+                name = "Growth in Robots Per Thousand Workers")
+```
+
+
+```{r}
+china_dip_10_2016 <- delta_impPen(china_trade,
+                         begin = '2011',
+                         end = '2016')
+
+
+us_rpw_2011 <- us_rpw00[, c("isic", "yr.2011")]
+us_rpw_2016 <- us_rpw00[, c("isic", "yr.2016")]
+
+us_rpw_11_16 <- merge(us_rpw_2011, us_rpw_2016, by = "isic")
+us_drpw_11_16 <- us_rpw_04_10 %>%
+  mutate(us_delta_rpw = yr.2010 - yr.2004) %>%
+  select(isic, us_delta_rpw)
+
+robs_trade.11_16 <- merge(us_drpw_11_16, china_dip_10_2016, by = "isic")
+robs_trade.11_16 <- merge(robs_trade.11_16, cbp00n, by = "isic")
+robs_trade.11_16$ind_prop <- robs_trade.11_16$emp/sum(robs_trade.11_16$emp)
+```
+
+
+```{r}
+robs_trade.11_16 %>%
+  ggplot(aes(x = delta_ip, us_delta_rpw)) +
+  geom_point(aes(size = ind_prop), pch = 21,
+             fill = "lightblue1",
+             col = "lightskyblue4") +
+    geom_text(aes(label = isic),
+            size = 3, col = "indianred2") +
+  geom_abline() +
+  scale_radius(range = c(1, 10), trans = "identity",
+  guide = "legend") +
+  scale_x_log10(limits = c(0.001,1000),
+                name = "Growth in Chinese Imports") +
+  scale_y_log10(limits = c(0.001,1000),
+                name = "Growth in Robots Per Thousand Workers")
+```
+
+```{r}
+options(scipen=5)
+iv_compare1 <- merge(us_drpw_04_16, eu_delta_rpw93_00, by = "isic")
+iv_compare1$eu_delta_rpw <- iv_compare1$eu_delta_rpw + 0.0000000001
+
+iv_compare1 <- merge(iv_compare1, cbp90n, by = "isic")
+iv_compare1$ind_prop <- iv_compare1$emp/sum(iv_compare1$emp)
+
+iv_grwth1 <-iv_compare1[iv_compare1$isic != "Z",] %>%
+  ggplot(aes(x = eu_delta_rpw, y = us_delta_rpw)) +
+    geom_point(aes(size = ind_prop), pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_text(aes(label = isic),
+            size = 3, col = "firebrick3") +
+  geom_abline() +
+  scale_radius(range = c(1, 10), trans = "identity",
+  guide = "legend") +
+  scale_x_log10(name = "Europe Exposure to Robots from 1993 to 2001",
+                limits = c(0.001,100)) +
+  scale_y_log10(name = "US Exposure to Robots from 2004 to 2010",
+                limits = c(0.001,100)) +
+    theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+iv_grwth1
+```
+
+
+```{r}
+options(scipen=5)
+us_rpw_2004 <- us_rpw90[, c("isic", "yr.2004")]
+us_rpw_2010 <- us_rpw90[, c("isic", "yr.2010")]
+
+us_rpw_04_10 <- merge(us_rpw_2004, us_rpw_2010, by = "isic")
+us_drpw_04_10 <- us_rpw_04_10 %>%
+  mutate(us_delta_rpw = yr.2010 - yr.2004) %>%
+  select(isic, us_delta_rpw)
+
+iv_compare2 <- merge(us_drpw_04_10, eu_delta_rpw01_10, by = "isic")
+
+iv_compare2 <- merge(iv_compare2, cbp90n, by = "isic")
+iv_compare2$ind_prop <- iv_compare2$emp/sum(iv_compare2$emp)
+iv_compare2$eu_delta_rpw <- abs(iv_compare2$eu_delta_rpw)
+
+iv_grwth2 <- iv_compare2[iv_compare1$isic != "Z",] %>%
+  ggplot(aes(x = eu_delta_rpw, y = us_delta_rpw)) +
+    geom_point(aes(size = ind_prop), pch = 21,
+             fill = "lightblue2",
+             col = "gray23") +
+  geom_text(aes(label = isic),
+            size = 3, col = "firebrick3") +
+  geom_abline() +
+  scale_radius(range = c(1, 10), trans = "identity",
+  guide = "legend") +
+  scale_x_log10(name = "Europe Exposure to Robots from 1993 to 2001",
+                limits = c(0.001,100)) +
+  scale_y_log10(name = "US Exposure to Robots from 2004 to 2010",
+                limits = c(0.001,100)) +
+    theme(legend.position = "none",
+        legend.title = element_blank(),
+        axis.text = element_text(size=11),
+        axis.title = element_text(size=11),
+        legend.text = element_text(size=11),
+        panel.grid.major.y = element_line( size=.1, color="gray65" ))
+
+iv_grwth2
+```
+
+
+```{r}
+pdf("../outputs/plots/iv_grwth.pdf", width=8, height=12)
+plot_grid(iv_grwth1, iv_grwth2, ncol = 1, align = "h")
+dev.off()
+```
+
+
+
+
+```{r}
+options(scipen=5)
+us_rpw_2004 <- us_rpw90[, c("isic", "yr.2004")]
+us_rpw_2008 <- us_rpw90[, c("isic", "yr.2008")]
+
+us_rpw_04_08 <- merge(us_rpw_2004, us_rpw_2008, by = "isic")
+us_drpw_04_08 <- us_rpw_04_08 %>%
+  mutate(us_delta_rpw = yr.2008 - yr.2004) %>%
+  select(isic, us_delta_rpw)
+
+
+iv_compare3 <- merge(us_drpw_04_08, eu_delta_rpw00_08, by = "isic")
+
+iv_compare3 %>%
+  ggplot(aes(x = eu_delta_rpw, y = us_delta_rpw)) +
+  geom_text(aes(label = isic),
+            size = 3) +
+  geom_abline() +
+  scale_x_log10(limits = c(0.001,1000),
+                name = "Europe Exposure to Robots from 2001 to 2010") +
+  scale_y_log10(limits = c(0.001,1000),
+                name = "US Exposure to Robots from 2004 to 2010")
+```
+
+
+```{r}
+us_rpw_2004 <- us_rpw90[, c("isic", "yr.2004")]
+us_rpw_2010 <- us_rpw90[, c("isic", "yr.2010")]
+
+us_rpw_04_10 <- merge(us_rpw_2004, us_rpw_2010, by = "isic")
+us_drpw_04_10 <- us_rpw_04_10 %>%
+  mutate(us_delta_rpw = yr.2010 - yr.2004) %>%
+  select(isic, us_delta_rpw)
+
+
+iv_compare4 <- merge(us_drpw_04_10, eu_delta_rpw93_00, by = "isic")
+
+iv_compare4 %>%
+  ggplot(aes(x = eu_delta_rpw, y = us_delta_rpw)) +
+  geom_text(aes(label = isic),
+            size = 3) +
+  geom_abline() +
+  scale_x_log10(limits = c(0.001,1000),
+                name = "Europe Exposure to Robots from 1993 to 2000") +
+  scale_y_log10(limits = c(0.001,1000),
+                name = "US Exposure to Robots from 2004 to 2010")
+```
+
+
+
+
+
+
+
+```{r}
+der_controls <- c("delta_exp_robs", "eu_delta_exp_robs",
+                  "china_deltaip",
+                  "man_sh", "sh_routine", "sh_off",
+                  "adlt", "miad1","miad2", "sen",
+                  "females",
+                  "black_nh", "nw_hisp", "asia_pi", "am_in", "other",
+                  "bach_plus",
+                  "win_prop_int", "unopposed_int", "nominate_beg_int",
+                  "gop_win_beg", "unopposed_beg", 
+                  "gop_delta_sh", "dem_delta_sh", "win_prty_delta_sh",
+                  "delta_win_margin", "delta_nom", "delta_abs_nom",
+                  "cd_prop_pop",
+                  "census")
+
+fs_df <- fss[,der_controls]
+```
+
+```{r}
+fs_df$der_x_hat <- 0
+fs_df$cip_x_hat <- 0
+
+# 1990's
+
+der_x_hat90 <- lm(delta_exp_robs ~. -china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - der_x_hat - cip_x_hat - delta_nom - delta_abs_nom, data = fs_df[fs_df$census==1990,-30], weights = cd_prop_pop)
+
+cip_der_x_hat90 <- lm(china_deltaip ~. - delta_exp_robs - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - der_x_hat -cip_x_hat - delta_nom - delta_abs_nom, data = fs_df[fs_df$census==1990,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 1990,]$der_x_hat = der_x_hat90$fitted.values
+fs_df[fs_df$census == 1990,]$cip_x_hat = cip_der_x_hat90$fitted.values
+
+
+# 2000's
+
+der_x_hat00 <- lm(delta_exp_robs ~. -china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - der_x_hat -cip_x_hat - delta_nom - delta_abs_nom, data = fs_df[fs_df$census==2000,-30], weights = cd_prop_pop)
+
+cip_der_x_hat00 <- lm(china_deltaip ~. - delta_exp_robs - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - der_x_hat -cip_x_hat - delta_nom - delta_abs_nom, data = fs_df[fs_df$census==2000,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 2000,]$der_x_hat = der_x_hat00$fitted.values
+fs_df[fs_df$census == 2000,]$cip_x_hat = cip_der_x_hat00$fitted.values
+
+
+# 2010's
+
+der_x_hat10 <- lm(delta_exp_robs ~. - china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - der_x_hat -cip_x_hat - delta_nom - delta_abs_nom, data = fs_df[fs_df$census==2010,-30], weights = cd_prop_pop)
+
+cip_der_x_hat10 <- lm(china_deltaip ~. - delta_exp_robs - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - der_x_hat -cip_x_hat - delta_nom - delta_abs_nom, data = fs_df[fs_df$census==2010,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 2010,]$der_x_hat = der_x_hat10$fitted.values
+fs_df[fs_df$census == 2010,]$cip_x_hat = cip_der_x_hat10$fitted.values
+```
+
+
+
+```{r}
+fs_df$der_x_hat_orth <- 0
+
+der_x_hat_orth90 <- lm(der_x_hat ~. - eu_delta_exp_robs - delta_exp_robs -china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - delta_nom - delta_abs_nom - der_x_hat_orth, data = fs_df[fs_df$census==1990,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 1990,]$der_x_hat_orth = der_x_hat_orth90$residuals
+
+
+
+der_x_hat_orth00 <- lm(der_x_hat ~. - eu_delta_exp_robs - delta_exp_robs -china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - delta_nom - delta_abs_nom - der_x_hat_orth, data = fs_df[fs_df$census==2000,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 2000,]$der_x_hat_orth = der_x_hat_orth00$residuals
+
+
+
+der_x_hat_orth10 <- lm(der_x_hat ~. - eu_delta_exp_robs - delta_exp_robs -china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - delta_nom - delta_abs_nom - der_x_hat_orth, data = fs_df[fs_df$census==2010,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 2010,]$der_x_hat_orth = der_x_hat_orth10$residuals
+```
+
+```{r}
+fs_df$dn_orth <- 0
+
+# 1990's
+
+dn_orth90 <- lm(delta_nom ~. - der_x_hat_orth - delta_exp_robs - china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - delta_abs_nom - der_x_hat_orth, data = fs_df[fs_df$census==1990,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 1990,]$dn_orth = dn_orth90$residuals
+
+
+# 2000's
+
+dn_orth00 <- lm(delta_nom ~. - der_x_hat_orth - delta_exp_robs - china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - delta_abs_nom - der_x_hat_orth, data = fs_df[fs_df$census==2000,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 2000,]$dn_orth = dn_orth00$residuals
+
+
+# 2010's
+
+dn_orth10 <- lm(delta_nom ~. - der_x_hat_orth - delta_exp_robs - china_deltaip - cd_prop_pop -  delta_win_margin - gop_delta_sh - dem_delta_sh - win_prty_delta_sh - delta_abs_nom - der_x_hat_orth, data = fs_df[fs_df$census==2010,-30], weights = cd_prop_pop)
+
+fs_df[fs_df$census == 2010,]$dn_orth = dn_orth10$residuals
+```
+
+
+```{r}
+fs_df$dan_orth <- 0
+
+
+```
+
+
+```{r}
+fs_df$gop_dvs_orth <- 0
+
+```
+
+
+
+```{r}
+fs_df$dem_dvs_orth <- 0
+
+```
+
+
+```{r}
+fs_df$dwvs_orth <- 0
+
+```
+
+
+
+```{r}
+fs_df$dwmvs_orth <- 0
+
+```
+
+
+```{r}
+fs_df %>%
+  ggplot(aes(x = der_x_hat_orth, y = dn_orth)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", aes(weight = cd_prop_pop))
+
+```
+
+
+```{r}
+cor(fss[fss$census == 1990, c("delta_exp_robs", "china_deltaip")])
+```
+
+```{r}
+cor(fss[fss$census == 2000, c("delta_exp_robs", "china_deltaip")])
+```
+
+```{r}
+cor(fss[fss$census == 2010, c("delta_exp_robs", "china_deltaip")])
+```
+
+```{r}
+fss1990 <- fss[fss$census == 1990, ]
+fss2000 <- fss[fss$census == 2000, ]
+fss2010 <- fss[fss$census == 2010, ]
+```
+
+```{r}
+IQR(fss1990$delta_exp_robs)
+IQR(fss2000$delta_exp_robs)
+IQR(fss2010$delta_exp_robs)
+```
+
+```{r}
+mean(fss1990$delta_exp_robs)
+mean(fss2000$delta_exp_robs)
+mean(fss2010$delta_exp_robs)
+```
+
+
+```{r}
+sd(fss1990$delta_exp_robs)
+sd(fss2000$delta_exp_robs)
+sd(fss2010$delta_exp_robs)
+```
+
+```{r}
+mean(fss1990$china_deltaip)
+mean(fss2000$china_deltaip)
+mean(fss2010$china_deltaip)
+```
+
+```{r}
+sd(fss1990$china_deltaip)
+sd(fss2000$china_deltaip)
+sd(fss2010$china_deltaip)
+```
+
+```{r}
+54.12
+IQR(fss1990$china_deltaip)
+IQR(fss2000$china_deltaip)
+IQR(fss2010$china_deltaip)
+```
+
+
+
+```{r}
+mean(fss1990$win_prty_delta_sh)
+mean(fss2000$win_prty_delta_sh)
+mean(fss2010$win_prty_delta_sh)
+```
+
+```{r}
+sd(fss1990$win_prty_delta_sh)
+sd(fss2000$win_prty_delta_sh)
+sd(fss2010$win_prty_delta_sh)
+```
+
+```{r}
+sd(fss1990$dem_delta_sh)
+sd(fss2000$dem_delta_sh)
+sd(fss2010$dem_delta_sh)
+```
+
+
+```{r}
+mean(fss1990$delta_win_margin)
+mean(fss2000$delta_win_margin)
+mean(fss2010$delta_win_margin)
+```
+
+
+```{r}
+sd(fss1990$delta_win_margin)
+sd(fss2000$delta_win_margin)
+sd(fss2010$delta_win_margin)
+```
+
+```{r}
+cz_df <- read.dta("../outputs/data/fsscz.dta")
+cz_df90 <- cz_df[cz_df$census == 1990, ]
+cz_df00 <- cz_df[cz_df$census == 2000, ]
+cz_df10 <- cz_df[cz_df$census == 2010, ]
+```
+
+
+```{r}
+chdip_iqr90 <- IQR(cz_df90$china_deltaip)
+chdip_iqr00 <- IQR(cz_df00$china_deltaip)
+chdip_iqr10 <- IQR(cz_df10$china_deltaip)
+chdip_iqr90
+chdip_iqr00
+chdip_iqr10
+```
+
+```{r}
+sd(cz_df90$china_deltaip)
+sd(cz_df00$china_deltaip)
+sd(cz_df10$china_deltaip)
+```
+
+```{r}
+(86.94*chdip_iqr10)/sd(cz_df10$china_deltaip)
+```
+
+```{r}
+cz_df10 %>% ggplot(aes(x = china_deltaip, y = delta_exp_robs)) +
+  geom_point()
+
+```
+
+
+
+```{r}
+house_elct_prty <- house_elections[house_elections$unopposed ==0,] %>%
+  group_by(raceYear) %>%
+  summarise(GOP = mean(gop_prop),
+            Democrats = mean(dem_prop))
+
+house_elct_prty.tidy <- gather(house_elct_prty[,c("GOP", "Democrats")],key = "party", value = "vote_share")
+
+house_elct_prty.tidy$year <- rep(seq(1992,2016,2),2)
+
+house_elct_prty.tidy %>%
+  ggplot(aes(x = year, y = vote_share, col = party)) +
+  geom_line() +
+  scale_color_manual(values=c("steelblue3", "lightcoral")) +
+  scale_x_continuous(breaks = seq(1992,2016,4))
+```
+
+
+```{r}
+house_elct_prty2 <- house_elections[house_elections$unopposed == 0,] %>%
+  group_by(raceYear, gop_win) %>%
+  summarise(GOP = mean(gop_prop),
+            Democrats = mean(dem_prop))
+
+house_elct_prty3 <- house_elections[house_elections$unopposed == 0,] %>%
+  group_by(raceYear) %>%
+  summarise(win_vs = mean(win_prop))
+
+house_elct_prty3 %>%
+  ggplot(aes(x=raceYear, y = win_vs)) +
+  geom_line()
+```
+
+
+
+
+
+```{r echo = F}
+save.image("eda2.RData")
+```
